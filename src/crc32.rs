@@ -167,3 +167,71 @@ impl<W: io::Write> io::Write for Writer<W> {
         self.inner.flush()
     }
 }
+
+#[cfg(test)]
+mod test {
+    use std::cmp::min;
+    use std::io::{self, Read, Write};
+    use super::{Crc32, Reader, Writer};
+
+    const LOREM_IPSUM: &'static[u8] = b"\
+Lorem ipsum dolor sit amet, consectetur adipiscing elit. Pellentesque id dolor
+ut lorem rutrum pulvinar sed id augue. Pellentesque neque magna, dapibus eget
+congue pretium, suscipit nec eros. Vestibulum ipsum metus, efficitur vitae erat
+et, sodales interdum quam. Ut nisl eros, semper at fermentum euismod, faucibus
+nec dolor. Suspendisse tincidunt lorem luctus dui dapibus finibus. Donec sed
+molestie urna, quis suscipit orci. Donec gravida arcu in nisi facilisis
+imperdiet. Donec nisi sem, iaculis eu tellus maximus, scelerisque ultricies
+tortor. Vestibulum gravida aliquet odio in posuere. Pellentesque sed
+ullamcorper augue. Aenean nec sem sem. Fusce condimentum vestibulum nisi quis
+dictum.\n";
+
+	const LOREM_IPSUM_CRC: u32 = 0xb5c90c4b;
+
+    #[test]
+    fn test_basic() {
+        let mut crc = Crc32::new();
+        crc.write(LOREM_IPSUM);
+        assert_eq!(crc.sum(), LOREM_IPSUM_CRC);
+
+        // test writing multiple chunks
+        let mut crc = Crc32::new();
+        let chunk_size = 16usize;
+        let mut written = 0usize;
+        while written < LOREM_IPSUM.len() {
+            let end = min(written + chunk_size, LOREM_IPSUM.len());
+            crc.write(&LOREM_IPSUM[written..end]);
+            written += end - written;
+        }
+        assert_eq!(crc.sum(), LOREM_IPSUM_CRC);
+    }
+
+    #[test]
+    fn test_reader() {
+        let mut reader = Reader::new(LOREM_IPSUM);
+        let mut data = Vec::<u8>::new();
+        let count = reader.read_to_end(&mut data).unwrap();
+        assert_eq!(count, LOREM_IPSUM.len());
+        assert_eq!(count, data.len());
+        assert_eq!(reader.sum(), LOREM_IPSUM_CRC);
+    }
+
+    // dummy writer that writes discards "written" data
+    struct NullWriter;
+    impl Write for NullWriter {
+        fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+            Ok(buf.len())
+        }
+        fn flush(&mut self) -> io::Result<()> {
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn test_writer() {
+        let mut writer = Writer::new(NullWriter);
+        let count = writer.write(LOREM_IPSUM).unwrap();
+        assert_eq!(count, LOREM_IPSUM.len());
+        assert_eq!(writer.sum(), LOREM_IPSUM_CRC);
+    }
+}
