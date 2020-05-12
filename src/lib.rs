@@ -1,7 +1,7 @@
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn it_works() {
-        assert_eq!(2 + 2, 4);
-    }
-}
+/*!
+ * main nimage library
+ * Copyright 2020 Allen Wild
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+
+pub mod crc32;
