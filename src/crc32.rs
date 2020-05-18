@@ -105,7 +105,10 @@ impl<R: io::Read> Reader<R> {
      * Create a new CRC32 reader, taking ownership of the specified inner reader.
      */
     pub fn new(inner: R) -> Self {
-        Reader { inner, crc: Crc32::new() }
+        Reader {
+            inner,
+            crc: Crc32::new(),
+        }
     }
 
     /**
@@ -143,7 +146,10 @@ impl<W: io::Write> Writer<W> {
      * Create a new CRC32 writer, taking owner of the specified inner writer.
      */
     pub fn new(inner: W) -> Self {
-        Writer { inner, crc: Crc32::new() }
+        Writer {
+            inner,
+            crc: Crc32::new(),
+        }
     }
 
     /**
@@ -172,9 +178,10 @@ impl<W: io::Write> io::Write for Writer<W> {
 mod test {
     use std::cmp::min;
     use std::io::{self, Read, Write};
+
     use super::{Crc32, Reader, Writer};
 
-    const LOREM_IPSUM: &'static[u8] = b"\
+    const LOREM_IPSUM: &'static [u8] = b"\
 Lorem ipsum dolor sit amet, consectetur adipiscing elit. Pellentesque id dolor
 ut lorem rutrum pulvinar sed id augue. Pellentesque neque magna, dapibus eget
 congue pretium, suscipit nec eros. Vestibulum ipsum metus, efficitur vitae erat
@@ -186,7 +193,7 @@ tortor. Vestibulum gravida aliquet odio in posuere. Pellentesque sed
 ullamcorper augue. Aenean nec sem sem. Fusce condimentum vestibulum nisi quis
 dictum.\n";
 
-	const LOREM_IPSUM_CRC: u32 = 0xb5c90c4b;
+    const LOREM_IPSUM_CRC: u32 = 0xb5c90c4b;
 
     #[test]
     fn test_basic() {

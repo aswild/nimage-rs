@@ -5,7 +5,7 @@
  */
 
 use std::fs::File;
-use std::io::{self, Read, BufRead, BufReader, Stdin};
+use std::io::{self, BufRead, BufReader, Read, Stdin};
 use std::path::Path;
 
 pub use clap::ArgMatches;

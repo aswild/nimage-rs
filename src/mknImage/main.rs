@@ -14,7 +14,7 @@
 
 use std::process::exit;
 
-use clap::{App, AppSettings, Arg, SubCommand, crate_version};
+use clap::{crate_version, App, AppSettings, Arg, SubCommand};
 
 use nimage::util::*;
 
@@ -26,11 +26,15 @@ fn app() -> App<'static, 'static> {
         .version(crate_version!())
         .about("Build and manipulate nImage files")
         .setting(AppSettings::SubcommandRequired)
-        .subcommand(SubCommand::with_name("crc32")
-                    .about("Read a file and compute the CRC32")
-                    .arg(Arg::with_name("FILE")
-                         .required(false)
-                         .help("Input file. Read stdin if FILE isn't present or is '-'")))
+        .subcommand(
+            SubCommand::with_name("crc32")
+                .about("Read a file and compute the CRC32")
+                .arg(
+                    Arg::with_name("FILE")
+                        .required(false)
+                        .help("Input file. Read stdin if FILE isn't present or is '-'"),
+                ),
+        )
 }
 
 fn get_handler(name: &str) -> CmdHandler {
