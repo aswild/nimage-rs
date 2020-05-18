@@ -16,10 +16,10 @@ use std::process::exit;
 
 use clap::{App, AppSettings, Arg, SubCommand, crate_version};
 
-use nimage::util::CmdHandler;
+use nimage::util::*;
 
-mod crc32cmd;
-use crc32cmd::Crc32Cmd;
+mod crc32;
+use crc32::cmd_crc32;
 
 fn app() -> App<'static, 'static> {
     App::new("mknImage")
@@ -33,11 +33,11 @@ fn app() -> App<'static, 'static> {
                          .help("Input file. Read stdin if FILE isn't present or is '-'")))
 }
 
-fn get_handler(name: &str) -> Box<dyn CmdHandler> {
-    Box::new(match name {
-        "crc32" => Crc32Cmd,
+fn get_handler(name: &str) -> CmdHandler {
+    match name {
+        "crc32" => cmd_crc32,
         _ => unreachable!("command handler not found"),
-    })
+    }
 }
 
 fn main() {
@@ -45,7 +45,7 @@ fn main() {
     let (subname, subargs) = args.subcommand();
     let subargs = subargs.unwrap();
 
-    if let Err(msg) = get_handler(subname).run(subargs) {
+    if let Err(msg) = get_handler(subname)(subargs) {
         eprintln!("Error: {}", msg);
         exit(1);
     }
