@@ -26,8 +26,8 @@ pub type ImageValidResult<T> = Result<T, ImageValidError>;
 impl Error for ImageValidError {}
 
 impl fmt::Display for ImageValidError {
+    #[rustfmt::skip] // rustfmt mangles this, use manual consistent formatting
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        #[rustfmt::skip] // rustfmt mangles this, use manual consistent formatting
         match self {
             Self::BadSize(size) => {
                 write!(f, "bad nImage header size. Expected {}, found {}",
@@ -67,8 +67,8 @@ pub type PartValidResult<T> = Result<T, PartValidError>;
 impl Error for PartValidError {}
 
 impl fmt::Display for PartValidError {
+    #[rustfmt::skip] // rustfmt mangles this, use manual consistent formatting
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        #[rustfmt::skip] // rustfmt mangles this, use manual consistent formatting
         match self {
             Self::BadMagic(magic) => {
                 write!(f, "bad nImage part magic. Expected 0x{:016x}, actual 0x{:016x}",

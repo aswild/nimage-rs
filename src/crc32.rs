@@ -91,6 +91,12 @@ impl Crc32 {
     }
 }
 
+impl Default for Crc32 {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 /**
  * Encapsulate any reader, and calculate a CRC32 on all bytes read.
  * The generic type R must implement std::io::Read.

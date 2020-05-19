@@ -131,11 +131,11 @@ impl PartHeader {
         PartHeader {
             size: 0,
             offset: 0,
-            ptype: ptype,
+            ptype,
         }
     }
 
-    pub fn type_name(&self, ptype: PartType) -> &'static str {
+    pub fn type_name(&self) -> &'static str {
         match self.ptype {
             PartType::Invalid => "invalid",
             PartType::BootImg => "boot_img",
