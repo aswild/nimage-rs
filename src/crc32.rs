@@ -98,6 +98,16 @@ impl Default for Crc32 {
 }
 
 /**
+ * Helper function to one-off CRC a block of data.
+ */
+#[inline]
+pub fn crc32_data(buf: &[u8]) -> u32 {
+    let mut crc = Crc32::new();
+    crc.write(buf);
+    crc.sum()
+}
+
+/**
  * Encapsulate any reader, and calculate a CRC32 on all bytes read.
  * The generic type R must implement std::io::Read.
  */
