@@ -4,10 +4,14 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
+use std::convert::TryFrom;
+use std::io::{Seek, SeekFrom};
+
+use super::crc32::*;
 use super::errors::*;
+use super::util::*;
 
 /// 8-byte magic for the nImage header, "NEWBSIMG" in ASCII, represented as a u64.
-//static NIMG_HDR_MAGIC: [u8; 8] = [b'N', b'E', b'W', b'B', b'S', b'I', b'M', b'G'];
 pub const NIMG_HDR_MAGIC: u64 = 0x4E45574253494D47u64;
 
 /// 8-byte magic for each nImage part, "NIMGPART" in ASCII, represented as a u64.
@@ -40,6 +44,38 @@ pub enum PartType {
     BootImgGz,
     BootImgXz,
     BootImgZstd,
+}
+// Safety! Keep this up to date
+const PART_TYPE_LAST: PartType = PartType::BootImgZstd;
+
+impl PartType {
+    /**
+     * Like try_from but also map the explicit Invalid variant to an error.
+     */
+    fn from_u8_valid(val: u8) -> PartValidResult<Self> {
+        PartType::try_from(val).and_then(|t| match t {
+            PartType::Invalid => Err(PartValidError::BadType(PartType::Invalid as u8)),
+            x => Ok(x),
+        })
+    }
+}
+
+impl TryFrom<u8> for PartType {
+    type Error = PartValidError;
+    /**
+     * Convert a u8 into a PartType, returning Err on an unrecognized type.
+     */
+    fn try_from(val: u8) -> Result<Self, Self::Error> {
+        // Apparently the normal way to do this is a big ugly match block.
+        // But since PartType is repr(u8), we can take an unsafe shortcut.
+        // This is safe as long as PART_TYPE_LAST is set correctly.
+        // We don't have to check (val >= 0) because it's unsigned.
+        if val <= (PART_TYPE_LAST as u8) {
+            Ok(unsafe { std::mem::transmute(val) })
+        } else {
+            Err(PartValidError::BadType(val))
+        }
+    }
 }
 
 /**
@@ -78,8 +114,10 @@ pub struct PartHeader {
 
     /// part type (1 byte)
     ptype: PartType,
+
     // 3 unused bytes
-    // 4 byte CRC32 checksum of the image data
+    /// 4 byte CRC32 checksum of the image data
+    crc: u32,
 }
 
 impl ImageHeader {
@@ -97,12 +135,74 @@ impl ImageHeader {
     /**
      * Parse and validate an nImage header read from disk.
      * Data must be exactly NIMG_HDR_SIZE (1024) bytes long.
+     * Relevant data will be copied out of buf, thus the returned object has no
+     * lifetime restrictions.
      */
-    pub fn from_bytes(data: &[u8]) -> ImageValidResult<Self> {
-        if data.len() != NIMG_HDR_SIZE {
-            return Err(ImageValidError::BadSize(data.len()));
+    pub fn from_bytes(buf: &[u8]) -> ImageValidResult<Self> {
+        // Ensure that the data is exactly the right size. This way we know that reading
+        // all the fields will never error (as long as this function has no bugs)
+        if buf.len() != NIMG_HDR_SIZE {
+            return Err(ImageValidError::BadSize(buf.len()));
         }
-        todo!()
+
+        let mut header = ImageHeader::new("");
+        let mut reader = SliceReader::new(buf);
+
+        // read and validate magic
+        let magic = reader.read_u64_le().unwrap();
+        if magic != NIMG_HDR_MAGIC {
+            return Err(ImageValidError::BadMagic(magic));
+        }
+
+        // validate the CRC
+        // seek to the last 4 bytes where the CRC is
+        reader.seek(SeekFrom::End(-4)).unwrap();
+        let expected_crc = reader.read_u32_le().unwrap();
+        let actual_crc = crc32_data(&buf[..(NIMG_HDR_SIZE - 4)]);
+        if expected_crc != actual_crc {
+            return Err(ImageValidError::BadCrc {
+                expected: expected_crc,
+                actual: actual_crc,
+            });
+        }
+
+        // seek back to right after the magic
+        reader.seek(SeekFrom::Start(8)).unwrap();
+
+        header.version = reader.read_byte().unwrap();
+        if header.version != NIMG_CURRENT_VERSION {
+            return Err(ImageValidError::UnsupportedVersion(header.version));
+        }
+
+        let num_parts = reader.read_byte().unwrap() as usize;
+        if num_parts > NIMG_MAX_PARTS {
+            return Err(ImageValidError::TooManyParts(num_parts));
+        }
+
+        // 6 unused bytes
+        reader.skip(6);
+
+        // process the name, which is a 128 byte CString that may or may not be null-terminated.
+        // CString::new doesn't want to see null bytes, so find and slice it ourself.
+        let name = reader.read_borrow(NIMG_NAME_LEN);
+        let nullpos = match name.iter().position(|c| *c == b'\0') {
+            Some(x) => x,       // position of the first nullbyte
+            None => name.len(), // no nullbyte found, use the whole string
+        };
+        header.name = String::from_utf8_lossy(&name[..nullpos]).into_owned();
+
+        for pidx in 0..num_parts {
+            let phdr = reader.read_borrow(NIMG_PHDR_SIZE);
+            let phdr = PartHeader::from_bytes(phdr)
+                .map_err(|err| ImageValidError::InvalidPart { index: pidx, err })?;
+            header.parts.push(phdr);
+        }
+
+        // ignore everything after the last used part header:
+        //  * empty part header slots
+        //  * 12 unused bytes
+        //  * 4 byte CRC32 (already handled)
+        Ok(header)
     }
 
     /**
@@ -132,7 +232,35 @@ impl PartHeader {
             size: 0,
             offset: 0,
             ptype,
+            crc: 0,
         }
+    }
+
+    /**
+     * Parse and validate an nImage part header read from disk.
+     * Data must be exactly NIMG_PHDR_SIZE (32) bytes long.
+     */
+    pub fn from_bytes(buf: &[u8]) -> PartValidResult<Self> {
+        if buf.len() != NIMG_PHDR_SIZE {
+            return Err(PartValidError::BadSize(buf.len()));
+        }
+
+        let mut header = PartHeader::new(PartType::Invalid);
+        let mut reader = SliceReader::new(buf);
+
+        let magic = reader.read_u64_le().unwrap();
+        if magic != NIMG_PHDR_MAGIC {
+            return Err(PartValidError::BadMagic(magic));
+        }
+
+        header.size = reader.read_u64_le().unwrap();
+        header.offset = reader.read_u64_le().unwrap();
+        header.ptype = PartType::from_u8_valid(reader.read_byte().unwrap())?;
+
+        reader.skip(3);
+        header.crc = reader.read_u32_le().unwrap();
+
+        Ok(header)
     }
 
     pub fn type_name(&self) -> &'static str {
