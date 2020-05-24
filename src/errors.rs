@@ -10,7 +10,7 @@ use std::fmt;
 use super::format::*;
 
 /// Errors that may be seen when parsing/validating an nImage header
-#[derive(Debug)]
+#[derive(Debug, Eq, PartialEq)]
 pub enum ImageValidError {
     BadSize(usize),
     BadMagic(u64),
@@ -65,7 +65,7 @@ impl fmt::Display for ImageValidError {
 }
 
 /// Errors that may be seen when parsing/validating an nImage part header
-#[derive(Debug)]
+#[derive(Debug, Eq, PartialEq)]
 pub enum PartValidError {
     BadSize(usize),
     BadMagic(u64),

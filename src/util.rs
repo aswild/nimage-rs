@@ -16,6 +16,22 @@ pub type CmdResult = Result<(), String>;
 pub type CmdHandler = fn(&ArgMatches) -> CmdResult;
 
 /**
+ * Assert that an experssion matches a pattern. Based on the std::matches macro
+ * but panics if the pattern doesn't match.
+ * Requires that the value of the expression implements Debug
+ */
+#[macro_export]
+macro_rules! assert_matches {
+    ($expression:expr, $( $pattern:pat )|+ $( if $guard:expr )?) => {
+        match $expression {
+            $( $pattern )|+ $( if $guard )? => (),
+            x => panic!("expression '{}' = '{:?}' does not match '{}'",
+                        stringify!($expression), x, stringify!($( $pattern )|+ $( if $guard )?)),
+        }
+    }
+}
+
+/**
  * Reader for a borrowed slice of bytes.
  * All read methods besides read_borrow copy data out of the slice.
  * It's assumed that the data slice doesn't change size, which I think is valid because
@@ -33,6 +49,14 @@ impl<'a> SliceReader<'a> {
      */
     pub fn new(data: &'a [u8]) -> Self {
         SliceReader { data, pos: 0 }
+    }
+
+    /**
+     * Get the current read position.
+     */
+    #[inline]
+    pub fn position(&self) -> usize {
+        self.pos
     }
 
     /**
@@ -146,7 +170,7 @@ impl Seek for SliceReader<'_> {
                     self.data.len()
                 } else {
                     let ilen: i64 = self.data.len().try_into().unwrap();
-                    min(0, ilen + pos) as usize
+                    max(0, ilen + pos) as usize
                 }
             }
             SeekFrom::Current(pos /*i64*/) => {
