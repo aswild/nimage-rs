@@ -5,7 +5,7 @@
  */
 
 use std::convert::TryFrom;
-use std::io::{Seek, SeekFrom};
+use std::io::{Cursor, Seek, SeekFrom};
 
 use super::crc32::*;
 use super::errors::*;
@@ -149,7 +149,7 @@ impl ImageHeader {
         }
 
         let mut header = ImageHeader::new("");
-        let mut reader = SliceReader::new(buf);
+        let mut reader = Cursor::new(buf);
 
         // read and validate magic
         let magic = reader.read_u64_le().unwrap();
@@ -249,7 +249,7 @@ impl PartHeader {
         }
 
         let mut header = PartHeader::new(PartType::Invalid);
-        let mut reader = SliceReader::new(buf);
+        let mut reader = Cursor::new(buf);
 
         let magic = reader.read_u64_le().unwrap();
         if magic != NIMG_PHDR_MAGIC {

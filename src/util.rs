@@ -4,10 +4,9 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-use std::cmp::{max, min};
-use std::convert::TryInto;
+use std::convert::{AsRef, TryInto};
 use std::fs::File;
-use std::io::{self, BufRead, BufReader, Read, Seek, SeekFrom, Stdin};
+use std::io::{self, BufRead, BufReader, Cursor, Read, Seek, SeekFrom, Stdin};
 use std::path::Path;
 
 pub use clap::ArgMatches;
@@ -32,155 +31,75 @@ macro_rules! assert_matches {
 }
 
 /**
- * Reader for a borrowed slice of bytes.
- * All read methods besides read_borrow copy data out of the slice.
- * It's assumed that the data slice doesn't change size, which I think is valid because
- * there can't be shared references and mut references at the same time.
+ * Extension of io::Cursor for reading numeric fields.
  */
-pub struct SliceReader<'a> {
-    data: &'a [u8],
-    pos: usize,
-}
-
-impl<'a> SliceReader<'a> {
-    /**
-     * Create a new SliceReader for the given slice of bytes. The returned object
-     * is only valid for the lifetime of the data.
-     */
-    pub fn new(data: &'a [u8]) -> Self {
-        SliceReader { data, pos: 0 }
-    }
-
-    /**
-     * Get the current read position.
-     */
-    #[inline]
-    pub fn position(&self) -> usize {
-        self.pos
-    }
-
-    /**
-     * Return how many bytes we have left to read.
-     */
-    #[inline]
-    pub fn remaining(&self) -> usize {
-        let len = self.data.len();
-        if self.pos < len {
-            len - self.pos
-        } else {
-            0
-        }
-    }
-
+pub trait ReadHelper {
     /**
      * Read one byte of data, or return None if there's no byte left to read.
      */
-    pub fn read_byte(&mut self) -> Option<u8> {
-        if self.remaining() < 1 {
-            None
-        } else {
-            let byte = self.data[self.pos];
-            self.pos += 1;
-            Some(byte)
-        }
-    }
-
-    /**
-     * Read 8 bytes, interpret them as a little-endian u64, and return the result.
-     * Return None if there were less than 8 bytes remaining.
-     */
-    pub fn read_u64_le(&mut self) -> Option<u64> {
-        if self.remaining() < 8 {
-            None
-        } else {
-            // from_le_bytes consumes an array, so copy from the slice into a stack
-            // array first. This ends up compiling down to a few register moves.
-            let mut arr = [0u8; 8];
-            arr.copy_from_slice(&self.data[self.pos..self.pos + 8]);
-            self.pos += 8;
-            Some(u64::from_le_bytes(arr))
-        }
-    }
+    fn read_byte(&mut self) -> Option<u8>;
 
     /**
      * Read 4 bytes, interpret them as a little-endian u32, and return the result.
      * Return None if there were less than 4 bytes remaining.
      */
-    pub fn read_u32_le(&mut self) -> Option<u32> {
-        if self.remaining() < 4 {
-            None
-        } else {
-            let mut arr = [0u8; 4];
-            arr.copy_from_slice(&self.data[self.pos..self.pos + 4]);
-            self.pos += 4;
-            Some(u32::from_le_bytes(arr))
-        }
-    }
+    fn read_u32_le(&mut self) -> Option<u32>;
+
+    /**
+     * Read 8 bytes, interpret them as a little-endian u64, and return the result.
+     * Return None if there were less than 8 bytes remaining.
+     */
+    fn read_u64_le(&mut self) -> Option<u64>;
 
     /**
      * Read up to count bytes and return it as a borrowed slice.
      * The returned slice's length may be less than count, or zero.
      */
-    pub fn read_borrow(&mut self, count: usize) -> &[u8] {
-        let count = min(count, self.remaining());
-        let ret = &self.data[self.pos..self.pos + count];
-        self.pos += count;
-        ret
-    }
+    fn read_borrow(&mut self, count: usize) -> &[u8];
 
     /**
      * Advance the read position by count bytes. Returns how many bytes which were
      * skipped, in case there were less than count bytes available to read.
      */
-    pub fn skip(&mut self, count: usize) -> usize {
+    fn skip(&mut self, count: usize) -> usize;
+}
+
+impl<T> ReadHelper for Cursor<T>
+where
+    T: AsRef<[u8]>,
+{
+    fn read_byte(&mut self) -> Option<u8> {
+        let mut b = [0u8];
+        self.read_exact(&mut b).ok()?;
+        Some(b[0])
+    }
+
+    fn read_u32_le(&mut self) -> Option<u32> {
+        let mut arr = [0u8; 4];
+        self.read_exact(&mut arr).ok()?;
+        Some(u32::from_le_bytes(arr))
+    }
+
+    fn read_u64_le(&mut self) -> Option<u64> {
+        let mut arr = [0u8; 8];
+        self.read_exact(&mut arr).ok()?;
+        Some(u64::from_le_bytes(arr))
+    }
+
+    fn read_borrow(&mut self, count: usize) -> &[u8] {
+        let pos = self.position() as usize;
+        self.set_position(self.position() + count as u64);
+        match self.get_ref().as_ref().get(pos..(pos + count)) {
+            Some(ref x) => x,
+            None => &[],
+        }
+    }
+
+    fn skip(&mut self, count: usize) -> usize {
         let count: i64 = count.try_into().unwrap();
-        let oldpos = self.pos;
+        let oldpos = self.position();
         self.seek(SeekFrom::Current(count)).unwrap();
-        self.pos - oldpos
-    }
-}
-
-impl Read for SliceReader<'_> {
-    /**
-     * Copy data from this reader into buf. The returned result will always be Ok,
-     * though the size may be less than what was requested.
-     */
-    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        let count = min(buf.len(), self.data.len() - self.pos);
-        (&mut buf[..count]).copy_from_slice(&self.data[self.pos..self.pos + count]);
-        self.pos += count;
-        Ok(count)
-    }
-}
-
-impl Seek for SliceReader<'_> {
-    /**
-     * Seek to a new position in the SliceReader.
-     * This function never returns an error, instead the returned value will just be clamped
-     * to the range [0, self.data.len()]
-     */
-    fn seek(&mut self, pos: SeekFrom) -> io::Result<u64> {
-        // no implicit conversions for i64/u64/usize, and u64->i64 could be lossy,
-        // hence all the .try_into().unwrap(). We assume that everything will fit well
-        // within 0x7fffffff_ffffffff bytes and ignore conversion errors.
-        self.pos = match pos {
-            SeekFrom::Start(pos /*u64*/) => min(pos as usize, self.data.len()),
-            SeekFrom::End(pos /*i64*/) => {
-                if pos >= 0 {
-                    self.data.len()
-                } else {
-                    let ilen: i64 = self.data.len().try_into().unwrap();
-                    max(0, ilen + pos) as usize
-                }
-            }
-            SeekFrom::Current(pos /*i64*/) => {
-                let ipos: i64 = self.pos.try_into().unwrap();
-                let ilen: i64 = self.data.len().try_into().unwrap();
-                let newpos = ipos + pos;
-                max(0, min(newpos, ilen)) as usize
-            }
-        };
-        Ok(self.pos as u64)
+        (self.position() - oldpos) as usize
     }
 }
 
