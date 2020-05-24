@@ -9,7 +9,5 @@ edition = "2018"
 clap = "2.33.1"
 
 [[bin]]
-# should be mknImage but cargo sets the bin name as a crate name,
-# causing snake case warnings.
 name = "mknImage"
 path = "src/mknImage/main.rs"
