@@ -6,7 +6,7 @@
 
 use std::convert::{AsRef, TryInto};
 use std::fs::File;
-use std::io::{self, BufRead, BufReader, Cursor, Read, Seek, SeekFrom, Stdin};
+use std::io::{self, BufRead, BufReader, Cursor, Read, Seek, SeekFrom, Stdin, Write};
 use std::path::Path;
 
 pub use clap::ArgMatches;
@@ -28,6 +28,20 @@ macro_rules! assert_matches {
                         stringify!($expression), x, stringify!($( $pattern )|+ $( if $guard )?)),
         }
     }
+}
+
+#[macro_export]
+macro_rules! assert_ok {
+    ($expression:expr) => {
+        assert_matches!($expression, Ok(_))
+    };
+}
+
+#[macro_export]
+macro_rules! assert_err {
+    ($expression:expr) => {
+        assert_matches!($expression, Err(_))
+    };
 }
 
 /**
@@ -103,6 +117,47 @@ where
     }
 }
 
+pub trait WriteHelper {
+    /**
+     * Write one byte of data.
+     */
+    fn write_byte(&mut self, val: u8) -> io::Result<()>;
+
+    /**
+     * Write 4 bytes of data as a little-endian u32.
+     */
+    fn write_u32_le(&mut self, val: u32) -> io::Result<()>;
+
+    /**
+     * Write 8 bytes of data as a little-endian u64.
+     */
+    fn write_u64_le(&mut self, val: u64) -> io::Result<()>;
+
+    /**
+     * Write some number of zero bytes.
+     */
+    fn write_zeros(&mut self, count: usize) -> io::Result<()>;
+}
+
+impl<T: Write> WriteHelper for T {
+    fn write_byte(&mut self, val: u8) -> io::Result<()> {
+        self.write_all(&[val])
+    }
+
+    fn write_u32_le(&mut self, val: u32) -> io::Result<()> {
+        self.write_all(&val.to_le_bytes())
+    }
+
+    fn write_u64_le(&mut self, val: u64) -> io::Result<()> {
+        self.write_all(&val.to_le_bytes())
+    }
+
+    fn write_zeros(&mut self, count: usize) -> io::Result<()> {
+        let vec = vec![0; count];
+        self.write_all(&vec)
+    }
+}
+
 /**
  * An Input stream which implements Read and BufRead an can either be stdin
  * or a file opened for reading.
@@ -169,15 +224,19 @@ impl BufRead for Input {
 mod tests {
     use super::*;
 
-    #[test]
-    fn test_read_helper() {
-        #[rustfmt::skip]
-        let arr: [u8; 32] = [
+    #[rustfmt::skip]
+    const fn header_arr() -> [u8; 32] {
+        [
             0x4e, 0x49, 0x4d, 0x47, 0x50, 0x41, 0x52, 0x54,
             0xe0, 0xee, 0x91, 0x00, 0x00, 0x00, 0x00, 0x00,
             0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
             0x09, 0x00, 0x00, 0x00, 0x21, 0x28, 0x7c, 0xcd,
-        ];
+        ]
+    }
+
+    #[test]
+    fn test_read_helper() {
+        let arr = header_arr();
         let mut reader = Cursor::new(&arr);
 
         {
@@ -216,5 +275,34 @@ mod tests {
         reader.seek(SeekFrom::End(-4)).unwrap();
         assert_eq!(reader.read_u32_le(), Some(0xcd7c2821));
         assert_eq!(reader.read_byte(), None);
+    }
+
+    #[test]
+    fn test_write_helper_slice() {
+        let mut arr = [0u8; 32];
+        let mut writer = Cursor::new(arr.as_mut());
+
+        assert_ok!(writer.write(b"NIMGPART"));
+        assert_ok!(writer.write_u64_le(0x0091eee0));
+        assert_ok!(writer.write_zeros(8));
+        assert_ok!(writer.write_byte(0x09));
+        assert_ok!(writer.write_zeros(3));
+        assert_ok!(writer.write_u32_le(0xcd7c2821));
+
+        // verify we can't write anything else
+        assert!(writer.write_byte(0).is_err());
+
+        // We can't directly access arr because writer holds a mutref to it. But we can
+        // get a reference indirectly from writer, which is legal.
+        assert_eq!(writer.get_ref(), &header_arr());
+
+        // go back and make sure we can't do a partial write either
+        writer.seek(SeekFrom::End(-3)).unwrap();
+        assert_eq!(writer.position(), 29);
+        assert_err!(writer.write_u32_le(0));
+        // not the behavior I want, but can live with. The write methods will write as much
+        // as they can before hitting the end, rather than checking for sufficient space first.
+        // No easy way around that without specialized implementations.
+        assert_eq!(writer.position(), 32);
     }
 }
