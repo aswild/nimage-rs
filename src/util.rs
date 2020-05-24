@@ -164,3 +164,57 @@ impl BufRead for Input {
         };
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_read_helper() {
+        #[rustfmt::skip]
+        let arr: [u8; 32] = [
+            0x4e, 0x49, 0x4d, 0x47, 0x50, 0x41, 0x52, 0x54,
+            0xe0, 0xee, 0x91, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x09, 0x00, 0x00, 0x00, 0x21, 0x28, 0x7c, 0xcd,
+        ];
+        let mut reader = Cursor::new(&arr);
+
+        {
+            // read_borrow does a mutable borrow of reader even though it returns an immutable
+            // reference to the inner slice. Thus, we can't touch reader again until we're done
+            // using magic.
+            let magic = reader.read_borrow(8);
+            assert_eq!(magic.len(), 8);
+            assert_eq!(String::from_utf8_lossy(magic), "NIMGPART");
+        }
+        assert_eq!(reader.position(), 8);
+
+        // read some integers, check the position along the way
+        assert_eq!(reader.read_u32_le(), Some(0x0091eee0));
+        assert_eq!(reader.read_u64_le(), Some(0));
+        reader.skip(4);
+        assert_eq!(reader.position(), 24);
+        assert_eq!(reader.read_byte(), Some(0x09));
+        reader.skip(3);
+
+        // try to read a u64 when there's only 4 bytes remaining. It should return
+        // None and not move the position
+        assert_eq!(reader.position(), 28);
+        assert_eq!(reader.read_u64_le(), None);
+        assert_eq!(reader.position(), 28);
+
+        // verify we can still read
+        assert_eq!(reader.read_u32_le(), Some(0xcd7c2821));
+        assert_eq!(reader.position(), 32);
+
+        // seek tests
+        reader.seek(SeekFrom::Start(8)).unwrap();
+        assert_eq!(reader.read_u64_le(), Some(0x00000000_0091eee0));
+        reader.seek(SeekFrom::Current(-8)).unwrap();
+        assert_eq!(reader.read_u64_le(), Some(0x00000000_0091eee0));
+        reader.seek(SeekFrom::End(-4)).unwrap();
+        assert_eq!(reader.read_u32_le(), Some(0xcd7c2821));
+        assert_eq!(reader.read_byte(), None);
+    }
+}
