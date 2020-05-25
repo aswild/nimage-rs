@@ -5,6 +5,7 @@
  */
 
 use std::convert::{TryFrom, TryInto};
+use std::fmt;
 use std::io::{self, Cursor, Seek, SeekFrom, Write};
 
 use super::crc32::{crc32_data, Writer as CrcWriter};
@@ -76,6 +77,23 @@ impl TryFrom<u8> for PartType {
         } else {
             Err(PartValidError::BadType(val))
         }
+    }
+}
+
+impl fmt::Display for PartType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(match self {
+            Self::Invalid => "invalid",
+            Self::BootImg => "boot_img",
+            Self::BootTar => "boot_tar",
+            Self::BootTarGz => "boot_tar_gz",
+            Self::BootTarXz => "boot_tar_xz",
+            Self::Rootfs => "rootfs",
+            Self::RootfsRw => "rootfs_rw",
+            Self::BootImgGz => "boot_img_gz",
+            Self::BootImgXz => "boot_img_xz",
+            Self::BootImgZstd => "boot_img_zstd",
+        })
     }
 }
 
@@ -320,21 +338,6 @@ impl PartHeader {
         writer.write_zeros(3)?;
         writer.write_u32_le(self.crc)?;
         Ok(())
-    }
-
-    pub fn type_name(&self) -> &'static str {
-        match self.ptype {
-            PartType::Invalid => "invalid",
-            PartType::BootImg => "boot_img",
-            PartType::BootTar => "boot_tar",
-            PartType::BootTarGz => "boot_tar_gz",
-            PartType::BootTarXz => "boot_tar_xz",
-            PartType::Rootfs => "rootfs",
-            PartType::RootfsRw => "rootfs_rw",
-            PartType::BootImgGz => "boot_img_gz",
-            PartType::BootImgXz => "boot_img_xz",
-            PartType::BootImgZstd => "boot_img_zstd",
-        }
     }
 }
 
