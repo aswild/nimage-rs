@@ -20,7 +20,7 @@
  * make it easy to compose the values of multiple blocks.
  */
 
-use std::io;
+use std::io::{self, Read, Write};
 
 const CRC32_TABLE: [u32; 256] = [
     0x00000000, 0x04c11db7, 0x09823b6e, 0x0d4326d9, 0x130476dc, 0x17c56b6b, 0x1a864db2, 0x1e475005,
@@ -109,14 +109,14 @@ pub fn crc32_data(buf: &[u8]) -> u32 {
 
 /**
  * Encapsulate any reader, and calculate a CRC32 on all bytes read.
- * The generic type R must implement std::io::Read.
+ * The generic type R must implement std::Read.
  */
 pub struct Reader<R> {
     inner: R,
     crc: Crc32,
 }
 
-impl<R: io::Read> Reader<R> {
+impl<R: Read> Reader<R> {
     /**
      * Create a new CRC32 reader, taking ownership of the specified inner reader.
      */
@@ -133,9 +133,17 @@ impl<R: io::Read> Reader<R> {
     pub fn sum(&self) -> u32 {
         self.crc.sum()
     }
+
+    /**
+     * Consume this object and return the inner reader.
+     * The CRC data will be lost, so call sum() before this if needed.
+     */
+    pub fn into_inner(self) -> R {
+        self.inner
+    }
 }
 
-impl<R: io::Read> io::Read for Reader<R> {
+impl<R: Read> Read for Reader<R> {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         // first read into buf from the inner reader, then update the CRC.
         // This doesn't violate "if an error is returned then it must be guaranteed
@@ -150,14 +158,14 @@ impl<R: io::Read> io::Read for Reader<R> {
 
 /**
  * Encapsulate any writer, and calculate a CRC32 on all bytes read.
- * The generic type W must implement std::io::Write.
+ * The generic type W must implement std::Write.
  */
 pub struct Writer<W> {
     inner: W,
     crc: Crc32,
 }
 
-impl<W: io::Write> Writer<W> {
+impl<W: Write> Writer<W> {
     /**
      * Create a new CRC32 writer, taking owner of the specified inner writer.
      */
@@ -174,9 +182,17 @@ impl<W: io::Write> Writer<W> {
     pub fn sum(&self) -> u32 {
         self.crc.sum()
     }
+
+    /**
+     * Consume this object and return the inner writer.
+     * The CRC data will be lost, so call sum() before this if needed.
+     */
+    pub fn into_inner(self) -> W {
+        self.inner
+    }
 }
 
-impl<W: io::Write> io::Write for Writer<W> {
+impl<W: Write> Write for Writer<W> {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
         let ret = self.inner.write(buf);
         if let Ok(count) = ret {
@@ -239,20 +255,9 @@ dictum.\n";
         assert_eq!(reader.sum(), LOREM_IPSUM_CRC);
     }
 
-    // dummy writer that writes discards "written" data
-    struct NullWriter;
-    impl Write for NullWriter {
-        fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-            Ok(buf.len())
-        }
-        fn flush(&mut self) -> io::Result<()> {
-            Ok(())
-        }
-    }
-
     #[test]
     fn test_writer() {
-        let mut writer = Writer::new(NullWriter);
+        let mut writer = Writer::new(io::sink());
         let count = writer.write(LOREM_IPSUM).unwrap();
         assert_eq!(count, LOREM_IPSUM.len());
         assert_eq!(writer.sum(), LOREM_IPSUM_CRC);
