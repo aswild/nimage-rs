@@ -5,6 +5,7 @@
  */
 
 use std::convert::{AsRef, TryInto};
+use std::fmt;
 use std::fs::File;
 use std::io::{self, BufRead, BufReader, Cursor, Read, Seek, SeekFrom, Stdin, Write};
 use std::path::Path;
@@ -42,6 +43,32 @@ macro_rules! assert_err {
     ($expression:expr) => {
         assert_matches!($expression, Err(_))
     };
+}
+
+/**
+ * Format a size of bytes into a human readable form.
+ */
+pub fn human_size(s: u64) -> String {
+    let (suffix, div) = if s > (1 << 30) {
+        ("GB", 1 << 30)
+    } else if s > (1 << 20) {
+        ("MB", 1 << 20)
+    } else if s > (1 << 10) {
+        ("KB", 1 << 10)
+    } else {
+        return format!("{} bytes", s);
+    };
+    let val: f64 = (s as f64) / (div as f64);
+    format!("{:.2}{}", val, suffix)
+}
+
+/**
+ * Format a size of bytes into human readable form, also including the
+ * decimal and hex representations in parentheses.
+ */
+pub fn human_size_extended(s: u64) -> String {
+    let hs = human_size(s);
+    format!("{0} ({1}, 0x{1:x})", hs, s)
 }
 
 /**
@@ -163,8 +190,10 @@ impl<T: Write> WriteHelper for T {
  * or a file opened for reading.
  */
 pub enum Input {
+    /// reading from standard input
     Stdin(BufReader<Stdin>),
-    File(BufReader<File>),
+    /// reading from a file, the String field is the filename, since File doesn't remember that
+    File(BufReader<File>, String),
 }
 
 impl Input {
@@ -177,7 +206,7 @@ impl Input {
         } else {
             let path = Path::new(name);
             match File::open(&path) {
-                Ok(f) => Ok(Self::File(BufReader::new(f))),
+                Ok(f) => Ok(Self::File(BufReader::new(f), name.to_string())),
                 Err(err) => Err(format!("failed to open '{}' for reading: {}", name, err)),
             }
         }
@@ -190,8 +219,17 @@ impl Input {
     pub fn is_file(&self) -> bool {
         match self {
             Self::Stdin(_) => false,
-            Self::File(_) => true,
+            Self::File(_, _) => true,
         }
+    }
+}
+
+impl fmt::Display for Input {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(match self {
+            Self::Stdin(_) => "[standard input]",
+            Self::File(_, path) => path,
+        })
     }
 }
 
@@ -199,7 +237,7 @@ impl Read for Input {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         match self {
             Self::Stdin(s) => s.read(buf),
-            Self::File(f) => f.read(buf),
+            Self::File(f, _) => f.read(buf),
         }
     }
 }
@@ -208,14 +246,14 @@ impl BufRead for Input {
     fn fill_buf(&mut self) -> io::Result<&[u8]> {
         match self {
             Self::Stdin(s) => s.fill_buf(),
-            Self::File(f) => f.fill_buf(),
+            Self::File(f, _) => f.fill_buf(),
         }
     }
 
     fn consume(&mut self, amt: usize) {
         match self {
             Self::Stdin(s) => s.consume(amt),
-            Self::File(f) => f.consume(amt),
+            Self::File(f, _) => f.consume(amt),
         };
     }
 }
