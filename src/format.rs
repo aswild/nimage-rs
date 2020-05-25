@@ -283,6 +283,25 @@ impl ImageHeader {
 
         Ok(())
     }
+
+    /**
+     * Print image header metadata to a writer. Optionally print the CRC32 given here,
+     * e.g. extracted from the original image, since the CRC isn't saved in ImageHeader itself.
+     */
+    pub fn print_to<W: Write>(&self, w: &mut W, crc: Option<u32>) -> io::Result<()> {
+        writeln!(w, "Image Name:      {}", self.name)?;
+        writeln!(w, "Image Version:   {}", self.version)?;
+        writeln!(w, "Number of Parts: {}", self.parts.len())?;
+        if let Some(crc) = crc {
+            writeln!(w, "Header CRC32     0x{:08x}", crc)?;
+        }
+
+        for (i, part) in self.parts.iter().enumerate() {
+            writeln!(w, "Part {}:", i)?;
+            part.print_to(w, 2)?;
+        }
+        Ok(())
+    }
 }
 
 impl PartHeader {
@@ -337,6 +356,19 @@ impl PartHeader {
         writer.write_byte(self.ptype as u8)?;
         writer.write_zeros(3)?;
         writer.write_u32_le(self.crc)?;
+        Ok(())
+    }
+
+    /**
+     * Print a text representation of the part metadata to a writer.
+     * Indent is the number of spaces to print before each line.
+     */
+    pub fn print_to<W: Write>(&self, w: &mut W, indent: usize) -> io::Result<()> {
+        let indent = " ".repeat(indent);
+        writeln!(w, "{}type:   {}", indent, self.ptype)?;
+        writeln!(w, "{}size:   {}", indent, human_size_extended(self.size))?;
+        writeln!(w, "{}offset: {}", indent, human_size_extended(self.offset))?;
+        writeln!(w, "{}crc32:  0x{:08x}", indent, self.crc)?;
         Ok(())
     }
 }
