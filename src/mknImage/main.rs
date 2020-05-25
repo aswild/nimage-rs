@@ -12,6 +12,7 @@
 // the entire mknimage crate. See https://github.com/rust-lang/rust/issues/45127
 #![allow(non_snake_case)]
 
+mod check;
 mod crc32;
 
 use std::convert::From;
@@ -48,20 +49,39 @@ fn app() -> App<'static, 'static> {
     App::new("mknImage")
         .version(crate_version!())
         .about("Build and manipulate nImage files")
+        .max_term_width(100)
         .setting(AppSettings::SubcommandRequired)
+        .subcommand(
+            SubCommand::with_name("check")
+                .about("Check an nImage file for errors and print header information")
+                .arg(
+                    Arg::with_name("FILE")
+                        .required(false)
+                        .help("Input file. Read from stdin if FILE isn't present or is '-'")
+                )
+                .arg(
+                    Arg::with_name("quiet")
+                        .short("q")
+                        .long("quiet")
+                        .multiple(true)
+                        .help("Only check for errors, don't dump info. \
+                               Pass -q twice to suppress printing errors and only use the exit code.")
+                ),
+        )
         .subcommand(
             SubCommand::with_name("crc32")
                 .about("Read a file and compute the CRC32")
                 .arg(
                     Arg::with_name("FILE")
                         .required(false)
-                        .help("Input file. Read stdin if FILE isn't present or is '-'"),
+                        .help("Input file. Read stdin if FILE isn't present or is '-'")
                 ),
         )
 }
 
 fn get_handler(name: &str) -> CmdHandler {
     match name {
+        "check" => check::cmd_check,
         "crc32" => crc32::cmd_crc32,
         _ => unreachable!("command handler not found"),
     }
