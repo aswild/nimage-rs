@@ -10,11 +10,6 @@ use std::fs::File;
 use std::io::{self, BufRead, BufReader, Cursor, Read, Seek, SeekFrom, Stdin, Write};
 use std::path::Path;
 
-pub use clap::ArgMatches;
-
-pub type CmdResult = Result<(), String>;
-pub type CmdHandler = fn(&ArgMatches) -> CmdResult;
-
 /**
  * Assert that an experssion matches a pattern. Based on the std::matches macro
  * but panics if the pattern doesn't match.
