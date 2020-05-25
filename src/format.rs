@@ -116,8 +116,11 @@ pub struct ImageHeader {
 
     /// vector of part headers, up to NIMG_MAX_PARTS (27)
     parts: Vec<PartHeader>,
+
     // 12 unused bytes
-    // 4 byte CRC32 checksum of the rest of the image header data
+    /// 4 byte CRC32 checksum of the rest of the image header data. Used only for the
+    /// Display impl, and only valid immediately after calling from_bytes or write_to.
+    crc: u32,
 }
 
 /**
@@ -150,6 +153,7 @@ impl ImageHeader {
             version: NIMG_CURRENT_VERSION,
             name: String::from(name), // could probably be fancy and use Cow
             parts: Vec::new(),
+            crc: 0,
         }
     }
 
@@ -179,11 +183,11 @@ impl ImageHeader {
         // seek to the last 4 bytes where the CRC is
         reader.seek(SeekFrom::End(-4)).unwrap();
         let expected_crc = reader.read_u32_le().unwrap();
-        let actual_crc = crc32_data(&buf[..(NIMG_HDR_SIZE - 4)]);
-        if expected_crc != actual_crc {
+        header.crc = crc32_data(&buf[..(NIMG_HDR_SIZE - 4)]);
+        if expected_crc != header.crc {
             return Err(ImageValidError::BadCrc {
                 expected: expected_crc,
-                actual: actual_crc,
+                actual: header.crc,
             });
         }
 
@@ -252,9 +256,10 @@ impl ImageHeader {
     }
 
     /**
-     * Serialize this image header into an array of bytes.
+     * Serialize this image header. On success, NIMG_HDR_SIZE bytes were written and the CRC32
+     * of the header is returned (same as the last 4 bytes written).
      */
-    pub fn write_to<W: Write>(&self, writer: W) -> io::Result<()> {
+    pub fn write_to<W: Write>(&self, writer: &mut W) -> io::Result<u32> {
         // validate ourselves, ensuring that the number of parts and name length won't overflow
         self.validate()
             .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
@@ -281,6 +286,28 @@ impl ImageHeader {
         let mut writer = writer.into_inner();
         writer.write_u32_le(crc)?;
 
+        Ok(crc)
+    }
+
+    /**
+     * Update the embedded CRC of this ImageHeader
+     */
+    pub fn update_crc(&mut self) -> ImageValidResult<()> {
+        self.crc = self.write_to(&mut io::sink()).map_err(|err| {
+            // If validation fails, we stuff the ImageValidError into an io::Result, all other
+            // errors of write_to come from the writer itself, and the sink writer can never fail.
+            // Thus if this fails it has to be an ImageValidError and this extremely cursed code
+            // unwraps and downcasts that.
+            if let Some(inner) = err.into_inner() {
+                if let Ok(e) = inner.downcast::<ImageValidError>() {
+                    *e
+                } else {
+                    panic!("unexpected inner error type");
+                }
+            } else {
+                panic!("unexpected missing inner error");
+            }
+        })?;
         Ok(())
     }
 }
@@ -391,6 +418,7 @@ mod tests {
                     crc: 0x1fc5f938,
                 },
             ],
+            crc: 0xf92e28ed,
         }
     }
 
@@ -431,5 +459,15 @@ mod tests {
         };
 
         assert_eq!(arr.as_ref(), good_header_bytes().as_ref());
+    }
+
+    #[test]
+    fn update_image_crc() {
+        let mut header = good_header_obj();
+        header.name = "x".repeat(NIMG_NAME_LEN + 1);
+        assert_eq!(
+            header.update_crc().unwrap_err(),
+            ImageValidError::NameTooLong(NIMG_NAME_LEN + 1)
+        );
     }
 }
