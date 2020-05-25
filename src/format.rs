@@ -107,15 +107,15 @@ impl fmt::Display for PartType {
 pub struct ImageHeader {
     // 8 byte magic "NEWBSIMG"
     /// nImage format version
-    version: u8,
+    pub version: u8,
 
     // 1 byte number of parts in the image, up to NIMG_MAX_PARTS (in Rust as parts.len())
     // 6 unused bytes
     /// name of the image, max NIMG_NAME_LEN (128) bytes
-    name: String,
+    pub name: String,
 
     /// vector of part headers, up to NIMG_MAX_PARTS (27)
-    parts: Vec<PartHeader>,
+    pub parts: Vec<PartHeader>,
     // 12 unused bytes
     // 4 byte CRC32 checksum of the rest of the image header data
 }
@@ -128,17 +128,17 @@ pub struct ImageHeader {
 pub struct PartHeader {
     // 8 byte magic "NIMGPART"
     /// size of the part data
-    size: u64,
+    pub size: u64,
 
     /// offset of the start of image data, relative to the end of the main header
-    offset: u64,
+    pub offset: u64,
 
     /// part type (1 byte)
-    ptype: PartType,
+    pub ptype: PartType,
 
     // 3 unused bytes
     /// 4 byte CRC32 checksum of the image data
-    crc: u32,
+    pub crc: u32,
 }
 
 impl ImageHeader {
