@@ -4,10 +4,10 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-use std::convert::TryFrom;
-use std::io::{Cursor, Seek, SeekFrom};
+use std::convert::{TryFrom, TryInto};
+use std::io::{self, Cursor, Seek, SeekFrom, Write};
 
-use super::crc32::*;
+use super::crc32::{crc32_data, Writer as CrcWriter};
 use super::errors::*;
 use super::util::*;
 
@@ -222,6 +222,47 @@ impl ImageHeader {
         if self.parts.len() > NIMG_MAX_PARTS {
             return Err(ImageValidError::TooManyParts(self.parts.len()));
         }
+        for (i, part) in self.parts.iter().enumerate() {
+            if part.ptype == PartType::Invalid {
+                return Err(ImageValidError::InvalidPart {
+                    index: i,
+                    err: PartValidError::BadType(PartType::Invalid as u8),
+                });
+            }
+        }
+        Ok(())
+    }
+
+    /**
+     * Serialize this image header into an array of bytes.
+     */
+    pub fn write_to<W: Write>(&self, writer: W) -> io::Result<()> {
+        // validate ourselves, ensuring that the number of parts and name length won't overflow
+        self.validate()
+            .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+
+        // wrap the writer to a CrcWriter which keeps track of the CRC32 for everything written
+        let mut writer = CrcWriter::new(writer);
+
+        writer.write_u64_le(NIMG_HDR_MAGIC)?;
+        writer.write_byte(self.version)?;
+        writer.write_byte(self.parts.len().try_into().unwrap())?;
+        writer.write_zeros(6)?;
+
+        writer.write_all(self.name.as_bytes())?;
+        writer.write_zeros(NIMG_NAME_LEN - self.name.len())?;
+
+        for part in self.parts.iter() {
+            part.write_to(&mut writer)?;
+        }
+        writer.write_zeros(NIMG_PHDR_SIZE * (NIMG_MAX_PARTS - self.parts.len()))?;
+        writer.write_zeros(12)?;
+
+        // get the CRC32 of all the data written so far and unwrap the CRC writer
+        let crc = writer.sum();
+        let mut writer = writer.into_inner();
+        writer.write_u32_le(crc)?;
+
         Ok(())
     }
 }
@@ -266,6 +307,21 @@ impl PartHeader {
         Ok(header)
     }
 
+    /**
+     * Serialize this part header into a writer. On Success, exactly 32 bytes should
+     * have been written.
+     */
+    pub fn write_to<W: Write>(&self, writer: &mut W) -> io::Result<()> {
+        // use WriteHelper methods from util.rs, which are automatically implemented
+        writer.write_u64_le(NIMG_PHDR_MAGIC)?;
+        writer.write_u64_le(self.size)?;
+        writer.write_u64_le(self.offset)?;
+        writer.write_byte(self.ptype as u8)?;
+        writer.write_zeros(3)?;
+        writer.write_u32_le(self.crc)?;
+        Ok(())
+    }
+
     pub fn type_name(&self) -> &'static str {
         match self.ptype {
             PartType::Invalid => "invalid",
@@ -306,7 +362,8 @@ mod tests {
     const GOOD_HEADER_CRC: [u8; 4] = [0xed, 0x28, 0x2e, 0xf9];
 
     fn good_header_bytes() -> [u8; NIMG_HDR_SIZE] {
-        // construct the full
+        // construct the full header array at runtime so we don't have a page worth of zero bytes
+        // in the source code
         let mut arr = [0u8; NIMG_HDR_SIZE];
         (&mut arr[..GOOD_HEADER_START.len()]).copy_from_slice(&GOOD_HEADER_START);
         (&mut arr[(NIMG_HDR_SIZE - 4)..]).copy_from_slice(&GOOD_HEADER_CRC);
@@ -358,5 +415,18 @@ mod tests {
             err: PartValidError::BadMagic(0x54524150_474d4900_u64),
         };
         assert_eq!(ImageHeader::from_bytes(&data).unwrap_err(), expected_err);
+    }
+
+    #[test]
+    fn write_image_header() {
+        let header = good_header_obj();
+        let mut arr = [0u8; NIMG_HDR_SIZE];
+
+        let mut writer = Cursor::new(arr.as_mut());
+        if let Err(err) = header.write_to(&mut writer) {
+            panic!("Failed to serialize header: {}", err);
+        };
+
+        assert_eq!(arr.as_ref(), good_header_bytes().as_ref());
     }
 }
