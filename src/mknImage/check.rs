@@ -49,6 +49,7 @@ fn read_exact_crc<R: Read>(input: &mut R, count: usize) -> io::Result<u32> {
     Ok(reader.sum())
 }
 
+#[allow(clippy::comparison_chain)] // suppress lint on the "if part.offset < current_offset"
 fn check_image(mut input: Input, q: bool) -> CmdResult {
     qprintln!(q, "{}:", input);
     let mut header_bytes = [0u8; NIMG_HDR_SIZE];
@@ -65,7 +66,6 @@ fn check_image(mut input: Input, q: bool) -> CmdResult {
     let mut current_offset = 0u64;
     for (i, part) in header.parts.iter().enumerate() {
         // handle padding before this part
-        #[allow(clippy::comparison_chain)] // this would look worse as a cmp/match
         if part.offset < current_offset {
             return Err(format!("Part {} offset {} is out of order", i, part.offset).into());
         } else if part.offset > current_offset {

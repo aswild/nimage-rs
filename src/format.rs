@@ -50,6 +50,20 @@ pub enum PartType {
 // Safety! Keep this up to date
 const PART_TYPE_LAST: PartType = PartType::BootImgZstd;
 
+/// list of part type names, used for Display and TryFrom<&str>
+static PART_TYPE_NAMES: [(PartType, &str); (PART_TYPE_LAST as usize + 1)] = [
+    (PartType::Invalid, "invalid"),
+    (PartType::BootImg, "boot_img"),
+    (PartType::BootTar, "boot_tar"),
+    (PartType::BootTarGz, "boot_tar_gz"),
+    (PartType::BootTarXz, "boot_tar_xz"),
+    (PartType::Rootfs, "rootfs"),
+    (PartType::RootfsRw, "rootfs_rw"),
+    (PartType::BootImgGz, "boot_img_gz"),
+    (PartType::BootImgXz, "boot_img_xz"),
+    (PartType::BootImgZstd, "boot_img_zstd"),
+];
+
 impl PartType {
     /**
      * Like try_from but also map the explicit Invalid variant to an error.
@@ -80,20 +94,30 @@ impl TryFrom<u8> for PartType {
     }
 }
 
+impl TryFrom<&str> for PartType {
+    type Error = ();
+    /**
+     * Convert a str into a PartType. The unit-type error means "invalid type name"
+     */
+    fn try_from(name: &str) -> Result<Self, Self::Error> {
+        for (t, n) in PART_TYPE_NAMES.iter() {
+            if name == *n {
+                return Ok(*t);
+            }
+        }
+        Err(())
+    }
+}
+
 impl fmt::Display for PartType {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(match self {
-            Self::Invalid => "invalid",
-            Self::BootImg => "boot_img",
-            Self::BootTar => "boot_tar",
-            Self::BootTarGz => "boot_tar_gz",
-            Self::BootTarXz => "boot_tar_xz",
-            Self::Rootfs => "rootfs",
-            Self::RootfsRw => "rootfs_rw",
-            Self::BootImgGz => "boot_img_gz",
-            Self::BootImgXz => "boot_img_xz",
-            Self::BootImgZstd => "boot_img_zstd",
-        })
+        for (t, n) in PART_TYPE_NAMES.iter() {
+            if self == t {
+                return f.write_str(n);
+            }
+        }
+        // if we get here, then PART_TYPE_NAMES is messed up
+        panic!("Missing display name for PartType {:?}", self);
     }
 }
 
