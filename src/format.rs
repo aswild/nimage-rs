@@ -51,7 +51,7 @@ pub enum PartType {
 const PART_TYPE_LAST: PartType = PartType::BootImgZstd;
 
 /// list of part type names, used for Display and TryFrom<&str>
-static PART_TYPE_NAMES: [(PartType, &str); (PART_TYPE_LAST as usize + 1)] = [
+pub static PART_TYPE_NAMES: [(PartType, &str); (PART_TYPE_LAST as usize + 1)] = [
     (PartType::Invalid, "invalid"),
     (PartType::BootImg, "boot_img"),
     (PartType::BootTar, "boot_tar"),
