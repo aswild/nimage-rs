@@ -48,6 +48,29 @@ impl<T: fmt::Display> From<T> for CmdError {
 pub type CmdResult = Result<(), CmdError>;
 pub type CmdHandler = fn(&ArgMatches) -> CmdResult;
 
+// debug log flag as a global variable. safe beacuse we're single-threaded and this gets set only
+// once at program startup.
+static mut DEBUG_ENABLED: bool = false;
+
+/// write a formatted message to stderr, prefixed with "[DEBUG FILE:LINE] ".
+/// This simple version uses a static global boolean
+#[macro_export]
+macro_rules! debug {
+    ($($arg:tt)*) => {
+        if unsafe { DEBUG_ENABLED } {
+            let mut filename = file!();
+            if filename.starts_with("src/") {
+                filename = &filename[4..];
+            }
+            if filename.ends_with(".rs") {
+                filename = &filename[..(filename.len()-3)];
+            }
+            eprint!("[DEBUG {}:{}] ", filename, line!());
+            eprintln!($($arg)*);
+        }
+    }
+}
+
 fn get_handler(name: &str) -> CmdHandler {
     match name {
         "create" => create::cmd_create,
@@ -74,6 +97,12 @@ fn main() {
         .about("Build and manipulate nImage files")
         .max_term_width(100)
         .setting(AppSettings::SubcommandRequired)
+        .arg(
+            Arg::with_name("debug")
+                .short("D")
+                .long("debug")
+                .help("Enable extra debug output")
+        )
         .subcommand(
             SubCommand::with_name("create")
                 .about("Create an nImage")
@@ -128,6 +157,11 @@ fn main() {
                 ),
         )
         .get_matches();
+
+    unsafe {
+        DEBUG_ENABLED = args.is_present("debug");
+    }
+    debug!("debug logging enabled");
 
     let (subname, subargs) = args.subcommand();
     let subargs = subargs.unwrap();
