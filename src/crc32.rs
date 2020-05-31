@@ -62,6 +62,7 @@ const CRC32_TABLE: [u32; 256] = [
  */
 pub struct Crc32 {
     crc: u32,
+    total: u64,
 }
 
 impl Crc32 {
@@ -69,7 +70,7 @@ impl Crc32 {
      * Create a new Crc32 initialized to 0
      */
     pub fn new() -> Self {
-        Crc32 { crc: 0 }
+        Crc32 { crc: 0, total: 0 }
     }
 
     /**
@@ -80,6 +81,7 @@ impl Crc32 {
             let idx = ((acc >> 24) ^ (*b as u32)) & 0xff;
             (acc << 8) ^ CRC32_TABLE[idx as usize]
         });
+        self.total += buf.len() as u64;
     }
 
     /**
@@ -88,6 +90,13 @@ impl Crc32 {
      */
     pub fn sum(&self) -> u32 {
         self.crc
+    }
+
+    /**
+     * Get the total number of bytes written to this CRC object.
+     */
+    pub fn total_bytes(&self) -> u64 {
+        self.total
     }
 }
 
@@ -132,6 +141,13 @@ impl<R: Read> Reader<R> {
      */
     pub fn sum(&self) -> u32 {
         self.crc.sum()
+    }
+
+    /**
+     * Get the total number of bytes read so far.
+     */
+    pub fn total_bytes(&self) -> u64 {
+        self.crc.total_bytes()
     }
 
     /**
@@ -181,6 +197,13 @@ impl<W: Write> Writer<W> {
      */
     pub fn sum(&self) -> u32 {
         self.crc.sum()
+    }
+
+    /**
+     * Get the total number of bytes written so far.
+     */
+    pub fn total_bytes(&self) -> u64 {
+        self.crc.total_bytes()
     }
 
     /**
