@@ -130,10 +130,7 @@ impl<R: Read> Reader<R> {
      * Create a new CRC32 reader, taking ownership of the specified inner reader.
      */
     pub fn new(inner: R) -> Self {
-        Reader {
-            inner,
-            crc: Crc32::new(),
-        }
+        Reader { inner, crc: Crc32::new() }
     }
 
     /**
@@ -186,10 +183,7 @@ impl<W: Write> Writer<W> {
      * Create a new CRC32 writer, taking owner of the specified inner writer.
      */
     pub fn new(inner: W) -> Self {
-        Writer {
-            inner,
-            crc: Crc32::new(),
-        }
+        Writer { inner, crc: Crc32::new() }
     }
 
     /**

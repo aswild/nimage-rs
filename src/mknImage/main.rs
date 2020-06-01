@@ -82,11 +82,7 @@ fn get_handler(name: &str) -> CmdHandler {
 
 fn main() {
     // comma separated string listing all the valid part types
-    let part_types = PART_TYPE_NAMES
-        .iter()
-        .map(|pair| pair.1)
-        .collect::<Vec<&str>>()
-        .join(", ");
+    let part_types = PART_TYPE_NAMES.iter().map(|pair| pair.1).collect::<Vec<&str>>().join(", ");
 
     // To use format! anywhere in the help text, we have to create the app and call .matches() all
     // in one statement or else we'll get errors about passing references to temporary objects.  If

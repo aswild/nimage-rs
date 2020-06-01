@@ -205,10 +205,7 @@ impl ImageHeader {
         let expected_crc = reader.read_u32_le().unwrap();
         let actual_crc = crc32_data(&buf[..(NIMG_HDR_SIZE - 4)]);
         if expected_crc != actual_crc {
-            return Err(ImageValidError::BadCrc {
-                expected: expected_crc,
-                actual: actual_crc,
-            });
+            return Err(ImageValidError::BadCrc { expected: expected_crc, actual: actual_crc });
         }
 
         // seek back to right after the magic
@@ -280,8 +277,7 @@ impl ImageHeader {
      */
     pub fn write_to<W: Write>(&self, writer: W) -> io::Result<()> {
         // validate ourselves, ensuring that the number of parts and name length won't overflow
-        self.validate()
-            .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+        self.validate().map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
 
         // wrap the writer to a CrcWriter which keeps track of the CRC32 for everything written
         let mut writer = CrcWriter::new(writer);
@@ -333,12 +329,7 @@ impl PartHeader {
      * Create a new empty nImage part header with the given type.
      */
     pub fn new(ptype: PartType) -> Self {
-        PartHeader {
-            size: 0,
-            offset: 0,
-            ptype,
-            crc: 0,
-        }
+        PartHeader { size: 0, offset: 0, ptype, crc: 0 }
     }
 
     /**
@@ -458,10 +449,7 @@ mod tests {
 
         // mangle the image magic, verify we get the correct error
         data[0] = 0;
-        assert_matches!(
-            ImageHeader::from_bytes(&data),
-            Err(ImageValidError::BadMagic(_))
-        );
+        assert_matches!(ImageHeader::from_bytes(&data), Err(ImageValidError::BadMagic(_)));
 
         // fix the image magic, break the second header magic
         data[0] = 0x4e;

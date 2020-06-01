@@ -33,12 +33,7 @@ impl Output {
     pub fn new(filename: &str) -> io::Result<Self> {
         let path = PathBuf::from(filename);
         let file = File::create(&path)?;
-        Ok(Output {
-            path,
-            file,
-            finished: false,
-            count: 0,
-        })
+        Ok(Output { path, file, finished: false, count: 0 })
     }
 
     pub fn finish(&mut self) {
@@ -108,12 +103,7 @@ fn add_part(output: &mut Output, header: &mut ImageHeader, pinput: &PartInput) -
 
     let size = reader.total_bytes();
     let crc = reader.sum();
-    let pheader = PartHeader {
-        size,
-        offset,
-        ptype: pinput.0,
-        crc,
-    };
+    let pheader = PartHeader { size, offset, ptype: pinput.0, crc };
     debug!("Created PartHeader {:?}", pheader);
 
     println!("Part {}\n  file:   {}", header.parts.len(), pinput.1);
@@ -157,12 +147,8 @@ pub fn cmd_create(args: &ArgMatches) -> CmdResult {
     }
 
     // seek back to the beginning and write the real header
-    output
-        .seek(SeekFrom::Start(0))
-        .map_err(|e| format!("Failed to seek output file: {}", e))?;
-    header
-        .write_to(&mut output)
-        .map_err(|e| format!("Failed to write image header: {}", e))?;
+    output.seek(SeekFrom::Start(0)).map_err(|e| format!("Failed to seek output file: {}", e))?;
+    header.write_to(&mut output).map_err(|e| format!("Failed to write image header: {}", e))?;
 
     // success, don't delete the output file when we return
     output.finish();
