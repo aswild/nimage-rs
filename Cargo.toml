@@ -8,6 +8,9 @@ edition = "2018"
 [dependencies]
 anyhow = "1.0.31"
 clap = "2.33.1"
+# use forked twox-hash for now so that XxHash32::total_len is u64 rather than u32.
+# Turn off default std feature which pulls in the rand crate as a dependency.
+twox-hash = { git = "https://github.com/aswild/twox-hash", default-features = false }
 
 [[bin]]
 name = "mknImage"

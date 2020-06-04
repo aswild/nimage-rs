@@ -68,6 +68,7 @@ version = "0.2.0-dev"
 dependencies = [
  "anyhow",
  "clap",
+ "twox-hash",
 ]
 
 [[package]]
@@ -84,6 +85,11 @@ checksum = "d326610f408c7a4eb6f51c37c330e496b08506c9457c9d34287ecc38809fb060"
 dependencies = [
  "unicode-width",
 ]
+
+[[package]]
+name = "twox-hash"
+version = "1.5.0"
+source = "git+https://github.com/aswild/twox-hash#b1e0d87126665af9bfad3e6025cffd2bfdca5ac3"
 
 [[package]]
 name = "unicode-width"

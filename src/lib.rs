@@ -14,3 +14,4 @@ pub mod crc32;
 pub mod errors;
 pub mod format;
 pub mod util;
+pub mod xxhio;
