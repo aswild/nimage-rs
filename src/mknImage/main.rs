@@ -15,6 +15,7 @@
 mod check;
 mod crc32;
 mod create;
+mod hash;
 
 use std::convert::From;
 use std::process::exit;
@@ -57,6 +58,7 @@ fn get_handler(name: &str) -> CmdHandler {
         "create" => create::cmd_create,
         "check" => check::cmd_check,
         "crc32" => crc32::cmd_crc32,
+        "hash" => hash::cmd_hash,
         _ => unreachable!("command handler not found"),
     }
 }
@@ -127,6 +129,15 @@ fn main() {
         .subcommand(
             SubCommand::with_name("crc32")
                 .about("Read a file and compute its CRC32")
+                .arg(
+                    Arg::with_name("FILE")
+                        .required(false)
+                        .help("Input file. Read stdin if FILE isn't present or is '-'")
+                ),
+        )
+        .subcommand(
+            SubCommand::with_name("hash")
+                .about("Read a file and compute its xxHash32")
                 .arg(
                     Arg::with_name("FILE")
                         .required(false)
