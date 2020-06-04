@@ -10,6 +10,8 @@ use std::fs::File;
 use std::io::{self, BufRead, BufReader, Cursor, Read, Seek, SeekFrom, Stdin, Write};
 use std::path::Path;
 
+use anyhow::Context;
+
 /**
  * Assert that an experssion matches a pattern. Based on the std::matches macro
  * but panics if the pattern doesn't match.
@@ -195,15 +197,13 @@ impl Input {
     /**
      * Open a file for buffered reading, or stdin if name is "-"
      */
-    pub fn open_file_or_stdin(name: &str) -> Result<Self, String> {
+    pub fn open_file_or_stdin(name: &str) -> anyhow::Result<Self> {
         if name == "-" {
             Ok(Self::Stdin(BufReader::new(io::stdin())))
         } else {
-            let path = Path::new(name);
-            match File::open(&path) {
-                Ok(f) => Ok(Self::File(BufReader::new(f), name.to_string())),
-                Err(err) => Err(format!("failed to open '{}' for reading: {}", name, err)),
-            }
+            File::open(&Path::new(name))
+                .map(|f| Self::File(BufReader::new(f), name.to_string()))
+                .with_context(|| format!("failed to open '{}' for reading", name))
         }
     }
 

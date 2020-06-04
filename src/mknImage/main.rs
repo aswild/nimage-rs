@@ -17,35 +17,16 @@ mod crc32;
 mod create;
 
 use std::convert::From;
-use std::fmt;
 use std::process::exit;
 
+pub use anyhow::{anyhow, Context, Result};
+pub use clap::ArgMatches;
 use clap::{crate_version, App, AppSettings, Arg, SubCommand};
 
 use nimage::format::{NIMG_MAX_PARTS, NIMG_NAME_LEN, PART_TYPE_NAMES};
 
 // exports to command modules
-pub use clap::ArgMatches;
-
-/**
- * String wrapper type since we can't write implementations for external types
- * like "impl From<io::Error> for String"
- * This lets handler functions use ? on calls that return io::Result without
- * having to manually map the error to a String. Other uses need to call .into()
- * to turn one of the From types into a CmdError.
- */
-pub struct CmdError(String);
-
-// this From implementation that works for everything which implements Display is cool,
-// but it means that CmdError itself can't be Display or else we fail to build with
-// "conflicting implementations of trait `std::convert::From<CmdError>` for type `CmdError`"
-impl<T: fmt::Display> From<T> for CmdError {
-    fn from(e: T) -> Self {
-        CmdError(e.to_string())
-    }
-}
-
-pub type CmdResult = Result<(), CmdError>;
+pub type CmdResult = Result<()>;
 pub type CmdHandler = fn(&ArgMatches) -> CmdResult;
 
 // debug log flag as a global variable. safe beacuse we're single-threaded and this gets set only
@@ -163,8 +144,8 @@ fn main() {
     let subargs = subargs.unwrap();
 
     if let Err(err) = get_handler(subname)(subargs) {
-        if !err.0.is_empty() {
-            eprintln!("Error: {}", err.0);
+        if !err.to_string().is_empty() {
+            eprintln!("Error: {:#}", err);
         }
         exit(1);
     }

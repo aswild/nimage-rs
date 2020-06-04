@@ -6,6 +6,7 @@ license = "GPL-3.0-or-later"
 edition = "2018"
 
 [dependencies]
+anyhow = "1.0.31"
 clap = "2.33.1"
 
 [[bin]]

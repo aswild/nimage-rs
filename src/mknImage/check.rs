@@ -67,25 +67,26 @@ fn check_image(mut input: Input, q: bool) -> CmdResult {
     for (i, part) in header.parts.iter().enumerate() {
         // handle padding before this part
         if part.offset < current_offset {
-            return Err(format!("Part {} offset {} is out of order", i, part.offset).into());
+            return Err(anyhow!("Part {} offset {} is out of order", i, part.offset));
         } else if part.offset > current_offset {
             let pad_bytes = part.offset - current_offset;
             let mut padding = vec![0u8; pad_bytes as usize];
             input
                 .read_exact(&mut padding)
-                .map_err(|e| format!("failed to read padding before part {}: {}", i, e))?;
+                .with_context(|| format!("failed to read padding before part {}", i))?;
             current_offset += pad_bytes;
         }
 
         // wrap the input to only read part.size bytes, then wrap that in a CRC reader
         let actual_crc = read_exact_crc(&mut input, part.size as usize)
-            .map_err(|e| format!("failed to read data for part {}: {}", i, e))?;
+            .with_context(|| format!("failed to read data for part {}", i))?;
         if actual_crc != part.crc {
-            return Err(format!(
+            return Err(anyhow!(
                 "Part {} CRC32 is invalid: expected 0x{:08x} actual 0x{:08x}",
-                i, part.crc, actual_crc
-            )
-            .into());
+                i,
+                part.crc,
+                actual_crc
+            ));
         }
 
         current_offset += part.size;
@@ -102,7 +103,7 @@ pub fn cmd_check(args: &ArgMatches) -> CmdResult {
     let ret = check_image(input, quiet_level > 0);
     if quiet_level >= 2 {
         // silent mode, hide the error messasge, but still return error
-        ret.map_err(|_| "".into())
+        ret.map_err(|_| anyhow!(""))
     } else {
         ret
     }

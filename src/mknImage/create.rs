@@ -73,18 +73,18 @@ impl Drop for Output {
     }
 }
 
-fn parse_type_file(arg: &str) -> Result<PartInput, String> {
+fn parse_type_file(arg: &str) -> Result<PartInput> {
     let colon = match arg.find(':') {
         Some(x) => x,
-        None => return Err(format!("invalid part argument '{}': missing ':'", arg)),
+        None => return Err(anyhow!("invalid part argument '{}': missing ':'", arg)),
     };
 
     let (type_str, filename) = arg.split_at(colon);
     let ptype = PartType::try_from(type_str)
-        .map_err(|_| format!("invalid part argument '{}': invalid part type", arg))?;
+        .map_err(|_| anyhow!("invalid part argument '{}': invalid part type", arg))?;
     if filename.len() < 2 {
         // filename will contain the colon, make sure there's more stuff too
-        return Err(format!("invalid part argument '{}': missing filename", arg));
+        return Err(anyhow!("invalid part argument '{}': missing filename", arg));
     }
     Ok(PartInput(ptype, &filename[1..]))
 }
@@ -93,7 +93,7 @@ fn add_part(output: &mut Output, header: &mut ImageHeader, pinput: &PartInput) -
     const ALIGN: u64 = 16;
     let inpath = Path::new(pinput.1);
     let infile = File::open(&inpath)
-        .map_err(|e| format!("Unable to open '{}' for reading: {}", pinput.1, e))?;
+        .with_context(|| format!("Unable to open '{}' for reading", pinput.1))?;
 
     let mut reader = CrcReader::new(BufReader::new(infile));
     debug!("Opened part input file '{}'", pinput.1);
@@ -135,7 +135,7 @@ pub fn cmd_create(args: &ArgMatches) -> CmdResult {
 
     // input is parsed, open the output file
     let mut output = Output::new(&output_path)
-        .map_err(|e| format!("unable to open '{}' for writing: {}", output_path, e))?;
+        .with_context(|| format!("unable to open '{}' for writing", output_path))?;
 
     // write header placeholder, then reset the write count to calculate correct offsets
     output.write_zeros(NIMG_HDR_SIZE)?;
@@ -147,8 +147,8 @@ pub fn cmd_create(args: &ArgMatches) -> CmdResult {
     }
 
     // seek back to the beginning and write the real header
-    output.seek(SeekFrom::Start(0)).map_err(|e| format!("Failed to seek output file: {}", e))?;
-    header.write_to(&mut output).map_err(|e| format!("Failed to write image header: {}", e))?;
+    output.seek(SeekFrom::Start(0)).context("Failed to seek output file")?;
+    header.write_to(&mut output).context("Failed to write image header")?;
 
     // success, don't delete the output file when we return
     output.finish();
