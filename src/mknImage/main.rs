@@ -13,7 +13,6 @@
 #![allow(non_snake_case)]
 
 mod check;
-mod crc32;
 mod create;
 mod hash;
 
@@ -57,7 +56,6 @@ fn get_handler(name: &str) -> CmdHandler {
     match name {
         "create" => create::cmd_create,
         "check" => check::cmd_check,
-        "crc32" => crc32::cmd_crc32,
         "hash" => hash::cmd_hash,
         _ => unreachable!("command handler not found"),
     }
@@ -124,15 +122,6 @@ fn main() {
                         .multiple(true)
                         .help("Only check for errors, don't dump info. \
                                Pass -q twice to suppress printing errors and only use the exit code.")
-                ),
-        )
-        .subcommand(
-            SubCommand::with_name("crc32")
-                .about("Read a file and compute its CRC32")
-                .arg(
-                    Arg::with_name("FILE")
-                        .required(false)
-                        .help("Input file. Read stdin if FILE isn't present or is '-'")
                 ),
         )
         .subcommand(
