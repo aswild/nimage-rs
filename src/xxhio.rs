@@ -16,7 +16,7 @@ use twox_hash::XxHash32;
 pub fn xxhash32(buf: &[u8]) -> u32 {
     let mut hasher = XxHash32::with_seed(0);
     hasher.write(buf);
-    hasher.finish_32()
+    hasher.finish() as u32
 }
 
 /**
@@ -40,14 +40,14 @@ impl<R: Read> Reader<R> {
      * Get the xxHash32 of all data read so far.
      */
     pub fn hash(&self) -> u32 {
-        self.xxh.finish_32() as u32
+        self.xxh.finish() as u32
     }
 
     /**
      * Get the total number of bytes read so far.
      */
     pub fn total_len(&self) -> u64 {
-        self.xxh.total_len()
+        self.xxh.total_len_64()
     }
 
     /**
@@ -93,14 +93,14 @@ impl<W: Write> Writer<W> {
      * Get the xxHash32 of all data written so far.
      */
     pub fn hash(&self) -> u32 {
-        self.xxh.finish_32()
+        self.xxh.finish() as u32
     }
 
     /**
      * Get the total number of bytes written so far.
      */
     pub fn total_len(&self) -> u64 {
-        self.xxh.total_len()
+        self.xxh.total_len_64()
     }
 
     /**

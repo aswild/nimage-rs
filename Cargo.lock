@@ -89,7 +89,7 @@ dependencies = [
 [[package]]
 name = "twox-hash"
 version = "1.5.0"
-source = "git+https://github.com/aswild/twox-hash#b1e0d87126665af9bfad3e6025cffd2bfdca5ac3"
+source = "git+https://github.com/aswild/twox-hash?branch=pr/xxh32-total64#77796019f567d9cb5b8c8189b457c4cc9bcdf9ef"
 
 [[package]]
 name = "unicode-width"
