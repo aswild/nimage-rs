@@ -10,9 +10,9 @@ use std::cmp::min;
 use std::io::prelude::*;
 use std::io::{self, Cursor, SeekFrom};
 
-use nimage::crc32::Reader as CrcReader;
 use nimage::format::*;
 use nimage::util::*;
+use nimage::xxhio;
 
 use crate::*;
 
@@ -29,11 +29,11 @@ fn last_u32(buf: &[u8]) -> u32 {
     reader.read_u32_le().unwrap()
 }
 
-/// Read exactly count bytes from input and return the CRC.
-fn read_exact_crc<R: Read>(input: &mut R, count: usize) -> io::Result<u32> {
+/// Read exactly count bytes from input and return the xxHash32.
+fn read_exact_xxh<R: Read>(input: &mut R, count: usize) -> io::Result<u32> {
     let mut buf = [0u8; 8192];
     let mut total = 0usize;
-    let mut reader = CrcReader::new(input);
+    let mut reader = xxhio::Reader::new(input);
 
     while total < count {
         let to_read = min(count - total, buf.len());
@@ -46,7 +46,7 @@ fn read_exact_crc<R: Read>(input: &mut R, count: usize) -> io::Result<u32> {
         }
         total += amt;
     }
-    Ok(reader.sum())
+    Ok(reader.hash())
 }
 
 #[allow(clippy::comparison_chain)] // suppress lint on the "if part.offset < current_offset"
@@ -57,9 +57,9 @@ fn check_image(mut input: Input, q: bool) -> CmdResult {
     let header = ImageHeader::from_bytes(&header_bytes)?;
 
     if !q {
-        // header doesn't store its CRC, get it from the original buffer
-        let crc = last_u32(&header_bytes);
-        header.print_to(&mut io::stdout(), Some(crc))?;
+        // header doesn't store its xxh, get it from the original buffer
+        let xxh = last_u32(&header_bytes);
+        header.print_to(&mut io::stdout(), Some(xxh))?;
     }
 
     // validate all the parts' data
@@ -77,15 +77,15 @@ fn check_image(mut input: Input, q: bool) -> CmdResult {
             current_offset += pad_bytes;
         }
 
-        // wrap the input to only read part.size bytes, then wrap that in a CRC reader
-        let actual_crc = read_exact_crc(&mut input, part.size as usize)
+        // wrap the input to only read part.size bytes, then wrap that in a hash reader
+        let actual_xxh = read_exact_xxh(&mut input, part.size as usize)
             .with_context(|| format!("failed to read data for part {}", i))?;
-        if actual_crc != part.crc {
+        if actual_xxh != part.xxh {
             return Err(anyhow!(
-                "Part {} CRC32 is invalid: expected 0x{:08x} actual 0x{:08x}",
+                "Part {} hash is invalid: expected 0x{:08x} actual 0x{:08x}",
                 i,
-                part.crc,
-                actual_crc
+                part.xxh,
+                actual_xxh
             ));
         }
 

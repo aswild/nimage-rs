@@ -12,9 +12,9 @@ use std::io::prelude::*;
 use std::io::{self, BufReader, SeekFrom};
 use std::path::{Path, PathBuf};
 
-use nimage::crc32::Reader as CrcReader;
 use nimage::format::*;
 use nimage::util::WriteHelper;
+use nimage::xxhio;
 
 use crate::*;
 
@@ -95,15 +95,15 @@ fn add_part(output: &mut Output, header: &mut ImageHeader, pinput: &PartInput) -
     let infile = File::open(&inpath)
         .with_context(|| format!("Unable to open '{}' for reading", pinput.1))?;
 
-    let mut reader = CrcReader::new(BufReader::new(infile));
+    let mut reader = xxhio::Reader::new(BufReader::new(infile));
     debug!("Opened part input file '{}'", pinput.1);
     let offset = output.count;
     debug!("start writing output at offset {}", offset);
     io::copy(&mut reader, output)?;
 
-    let size = reader.total_bytes();
-    let crc = reader.sum();
-    let pheader = PartHeader { size, offset, ptype: pinput.0, crc };
+    let size = reader.total_len();
+    let xxh = reader.hash();
+    let pheader = PartHeader { size, offset, ptype: pinput.0, xxh };
     debug!("Created PartHeader {:?}", pheader);
 
     println!("Part {}\n  file:   {}", header.parts.len(), pinput.1);

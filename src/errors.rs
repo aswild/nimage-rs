@@ -18,7 +18,7 @@ pub enum ImageValidError {
     NameTooLong(usize),
     TooManyParts(usize),
     InvalidPart { index: usize, err: PartValidError },
-    BadCrc { expected: u32, actual: u32 },
+    BadHash { expected: u32, actual: u32 },
 }
 
 pub type ImageValidResult<T> = Result<T, ImageValidError>;
@@ -56,8 +56,8 @@ impl fmt::Display for ImageValidError {
             Self::InvalidPart { index, err } => {
                 write!(f, "invalid part header at index {}: {}", index, err)
             }
-            Self::BadCrc { expected, actual } => {
-                write!(f, "invalid image header CRC. Expected 0x{:08x}, found 0x{:08x}",
+            Self::BadHash { expected, actual } => {
+                write!(f, "invalid image header hash. Expected 0x{:08x}, found 0x{:08x}",
                        expected, actual)
             }
         }
@@ -70,7 +70,7 @@ pub enum PartValidError {
     BadSize(usize),
     BadMagic(u64),
     BadType(u8),
-    BadCrc { expected: u32, actual: u32 },
+    BadHash { expected: u32, actual: u32 },
 }
 
 pub type PartValidResult<T> = Result<T, PartValidError>;
@@ -92,8 +92,8 @@ impl fmt::Display for PartValidError {
             Self::BadType(t) => {
                 write!(f, "bad nImage part type {}", t)
             }
-            Self::BadCrc { expected, actual } => {
-                write!(f, "invalid part data CRC. Expected 0x{:08x}, found 0x{:08x}",
+            Self::BadHash { expected, actual } => {
+                write!(f, "invalid part data hash. Expected 0x{:08x}, found 0x{:08x}",
                        expected, actual)
             }
         }

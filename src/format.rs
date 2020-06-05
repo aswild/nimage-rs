@@ -8,9 +8,9 @@ use std::convert::{TryFrom, TryInto};
 use std::fmt;
 use std::io::{self, Cursor, Seek, SeekFrom, Write};
 
-use super::crc32::{crc32_data, Writer as CrcWriter};
 use super::errors::*;
 use super::util::*;
+use super::xxhio;
 
 /// 8-byte magic for the nImage header, "NEWBSIMG" in ASCII, or a little-endian u64
 pub const NIMG_HDR_MAGIC: u64 = 0x474D4953_4257454E_u64;
@@ -19,7 +19,7 @@ pub const NIMG_HDR_MAGIC: u64 = 0x474D4953_4257454E_u64;
 pub const NIMG_PHDR_MAGIC: u64 = 0x54524150_474d494e_u64;
 
 /// Current (latest) version of the nImage format supported by this code
-pub const NIMG_CURRENT_VERSION: u8 = 2;
+pub const NIMG_CURRENT_VERSION: u8 = 3;
 
 /// Size of the nImage header
 pub const NIMG_HDR_SIZE: usize = 1024;
@@ -51,7 +51,7 @@ pub enum PartType {
 const PART_TYPE_LAST: PartType = PartType::BootImgZstd;
 
 /// list of part type names, used for Display and TryFrom<&str>
-pub static PART_TYPE_NAMES: [(PartType, &str); (PART_TYPE_LAST as usize + 1)] = [
+pub static PART_TYPE_NAMES: [(PartType, &str); PART_TYPE_LAST as usize + 1] = [
     (PartType::Invalid, "invalid"),
     (PartType::BootImg, "boot_img"),
     (PartType::BootTar, "boot_tar"),
@@ -141,7 +141,7 @@ pub struct ImageHeader {
     /// vector of part headers, up to NIMG_MAX_PARTS (27)
     pub parts: Vec<PartHeader>,
     // 12 unused bytes
-    // 4 byte CRC32 checksum of the rest of the image header data
+    // 4 byte xxHash32 checksum of the rest of the image header data
 }
 
 /**
@@ -161,8 +161,8 @@ pub struct PartHeader {
     pub ptype: PartType,
 
     // 3 unused bytes
-    /// 4 byte CRC32 checksum of the image data
-    pub crc: u32,
+    /// 4 byte xxHash32 checksum of the image data
+    pub xxh: u32,
 }
 
 impl ImageHeader {
@@ -199,13 +199,13 @@ impl ImageHeader {
             return Err(ImageValidError::BadMagic(magic));
         }
 
-        // validate the CRC
-        // seek to the last 4 bytes where the CRC is
+        // validate the hash
+        // seek to the last 4 bytes where the hash is
         reader.seek(SeekFrom::End(-4)).unwrap();
-        let expected_crc = reader.read_u32_le().unwrap();
-        let actual_crc = crc32_data(&buf[..(NIMG_HDR_SIZE - 4)]);
-        if expected_crc != actual_crc {
-            return Err(ImageValidError::BadCrc { expected: expected_crc, actual: actual_crc });
+        let expected_xxh = reader.read_u32_le().unwrap();
+        let actual_xxh = xxhio::xxhash32(&buf[..(NIMG_HDR_SIZE - 4)]);
+        if expected_xxh != actual_xxh {
+            return Err(ImageValidError::BadHash { expected: expected_xxh, actual: actual_xxh });
         }
 
         // seek back to right after the magic
@@ -243,7 +243,7 @@ impl ImageHeader {
         // ignore everything after the last used part header:
         //  * empty part header slots
         //  * 12 unused bytes
-        //  * 4 byte CRC32 (already handled)
+        //  * 4 byte xxHash32 (already handled)
         Ok(header)
     }
 
@@ -279,8 +279,8 @@ impl ImageHeader {
         // validate ourselves, ensuring that the number of parts and name length won't overflow
         self.validate().map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
 
-        // wrap the writer to a CrcWriter which keeps track of the CRC32 for everything written
-        let mut writer = CrcWriter::new(writer);
+        // wrap the writer to a xxhWriter which keeps track of the xxHash32 for everything written
+        let mut writer = xxhio::Writer::new(writer);
 
         writer.write_u64_le(NIMG_HDR_MAGIC)?;
         writer.write_byte(self.version)?;
@@ -296,24 +296,24 @@ impl ImageHeader {
         writer.write_zeros(NIMG_PHDR_SIZE * (NIMG_MAX_PARTS - self.parts.len()))?;
         writer.write_zeros(12)?;
 
-        // get the CRC32 of all the data written so far and unwrap the CRC writer
-        let crc = writer.sum();
+        // get the xxHash32 of all the data written so far and unwrap the xxh writer
+        let xxh = writer.hash();
         let mut writer = writer.into_inner();
-        writer.write_u32_le(crc)?;
+        writer.write_u32_le(xxh)?;
 
         Ok(())
     }
 
     /**
-     * Print image header metadata to a writer. Optionally print the CRC32 given here,
-     * e.g. extracted from the original image, since the CRC isn't saved in ImageHeader itself.
+     * Print image header metadata to a writer. Optionally print the xxHash32 given here,
+     * e.g. extracted from the original image, since the hash isn't saved in ImageHeader itself.
      */
-    pub fn print_to<W: Write>(&self, w: &mut W, crc: Option<u32>) -> io::Result<()> {
+    pub fn print_to<W: Write>(&self, w: &mut W, xxh: Option<u32>) -> io::Result<()> {
         writeln!(w, "Image Name:      {}", self.name)?;
         writeln!(w, "Image Version:   {}", self.version)?;
         writeln!(w, "Number of Parts: {}", self.parts.len())?;
-        if let Some(crc) = crc {
-            writeln!(w, "Header CRC32     0x{:08x}", crc)?;
+        if let Some(xxh) = xxh {
+            writeln!(w, "Header xxHash:   0x{:08x}", xxh)?;
         }
 
         for (i, part) in self.parts.iter().enumerate() {
@@ -329,7 +329,7 @@ impl PartHeader {
      * Create a new empty nImage part header with the given type.
      */
     pub fn new(ptype: PartType) -> Self {
-        PartHeader { size: 0, offset: 0, ptype, crc: 0 }
+        PartHeader { size: 0, offset: 0, ptype, xxh: 0 }
     }
 
     /**
@@ -354,7 +354,7 @@ impl PartHeader {
         header.ptype = PartType::from_u8_valid(reader.read_byte().unwrap())?;
 
         reader.skip(3);
-        header.crc = reader.read_u32_le().unwrap();
+        header.xxh = reader.read_u32_le().unwrap();
 
         Ok(header)
     }
@@ -370,7 +370,7 @@ impl PartHeader {
         writer.write_u64_le(self.offset)?;
         writer.write_byte(self.ptype as u8)?;
         writer.write_zeros(3)?;
-        writer.write_u32_le(self.crc)?;
+        writer.write_u32_le(self.xxh)?;
         Ok(())
     }
 
@@ -383,7 +383,7 @@ impl PartHeader {
         writeln!(w, "{}type:   {}", indent, self.ptype)?;
         writeln!(w, "{}size:   {}", indent, human_size_extended(self.size))?;
         writeln!(w, "{}offset: {}", indent, human_size_extended(self.offset))?;
-        writeln!(w, "{}crc32:  0x{:08x}", indent, self.crc)?;
+        writeln!(w, "{}xxHash: 0x{:08x}", indent, self.xxh)?;
         Ok(())
     }
 }
@@ -395,7 +395,7 @@ mod tests {
 
     #[rustfmt::skip]
     const GOOD_HEADER_START: [u8; 208] = [
-        0x4e, 0x45, 0x57, 0x42, 0x53, 0x49, 0x4d, 0x47, 0x02, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x4e, 0x45, 0x57, 0x42, 0x53, 0x49, 0x4d, 0x47, 0x03, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
         0x63, 0x6f, 0x72, 0x65, 0x2d, 0x69, 0x6d, 0x61, 0x67, 0x65, 0x2d, 0x6e, 0x65, 0x77, 0x62, 0x73,
         0x2d, 0x72, 0x61, 0x73, 0x70, 0x62, 0x65, 0x72, 0x72, 0x79, 0x70, 0x69, 0x34, 0x2d, 0x36, 0x34,
         0x2d, 0x32, 0x30, 0x32, 0x30, 0x30, 0x35, 0x30, 0x31, 0x32, 0x32, 0x32, 0x38, 0x32, 0x37, 0x2e,
@@ -409,14 +409,14 @@ mod tests {
         0x4e, 0x49, 0x4d, 0x47, 0x50, 0x41, 0x52, 0x54, 0x00, 0xe0, 0xb0, 0x06, 0x00, 0x00, 0x00, 0x00,
         0xe0, 0xee, 0x91, 0x00, 0x00, 0x00, 0x00, 0x00, 0x05, 0x00, 0x00, 0x00, 0x38, 0xf9, 0xc5, 0x1f,
     ];
-    const GOOD_HEADER_CRC: [u8; 4] = [0xed, 0x28, 0x2e, 0xf9];
+    const GOOD_HEADER_HASH: [u8; 4] = [0xda, 0xab, 0xee, 0xdd];
 
     fn good_header_bytes() -> [u8; NIMG_HDR_SIZE] {
         // construct the full header array at runtime so we don't have a page worth of zero bytes
         // in the source code
         let mut arr = [0u8; NIMG_HDR_SIZE];
         (&mut arr[..GOOD_HEADER_START.len()]).copy_from_slice(&GOOD_HEADER_START);
-        (&mut arr[(NIMG_HDR_SIZE - 4)..]).copy_from_slice(&GOOD_HEADER_CRC);
+        (&mut arr[(NIMG_HDR_SIZE - 4)..]).copy_from_slice(&GOOD_HEADER_HASH);
         arr
     }
 
@@ -429,13 +429,13 @@ mod tests {
                     size: 0x0091eee0,
                     offset: 0,
                     ptype: PartType::BootImgZstd,
-                    crc: 0xcd7c2821,
+                    xxh: 0xcd7c2821,
                 },
                 PartHeader {
                     size: 0x06b0e000,
                     offset: 0x0091eee0,
                     ptype: PartType::Rootfs,
-                    crc: 0x1fc5f938,
+                    xxh: 0x1fc5f938,
                 },
             ],
         }
@@ -454,8 +454,8 @@ mod tests {
         // fix the image magic, break the second header magic
         data[0] = 0x4e;
         data[0xb0] = 0;
-        // fix the main crc to match the broken phdr data
-        (&mut data[(NIMG_HDR_SIZE - 4)..]).copy_from_slice(&[0x87, 0x06, 0xef, 0x9b]);
+        // fix the main hash to match the broken phdr data
+        (&mut data[(NIMG_HDR_SIZE - 4)..]).copy_from_slice(&[0xf3, 0xb6, 0xd8, 0x7c]);
         // expect a specific BadMagic error
         let expected_err = ImageValidError::InvalidPart {
             index: 1,

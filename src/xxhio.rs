@@ -14,7 +14,7 @@ use twox_hash::XxHash32;
  * One-off xxHash32 of a byte slice.
  */
 pub fn xxhash32(buf: &[u8]) -> u32 {
-    let hasher = XxHash32::with_seed(0);
+    let mut hasher = XxHash32::with_seed(0);
     hasher.write(buf);
     hasher.finish_32()
 }
