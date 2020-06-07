@@ -6,7 +6,6 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-use std::cmp::min;
 use std::io::prelude::*;
 use std::io::{self, Cursor, SeekFrom};
 
@@ -30,23 +29,17 @@ fn last_u32(buf: &[u8]) -> u32 {
 }
 
 /// Read exactly count bytes from input and return the xxHash32.
-fn read_exact_xxh<R: Read>(input: &mut R, count: usize) -> io::Result<u32> {
-    let mut buf = [0u8; 8192];
-    let mut total = 0usize;
-    let mut reader = xxhio::Reader::new(input);
-
-    while total < count {
-        let to_read = min(count - total, buf.len());
-        let amt = reader.read(&mut buf[..to_read])?;
-        if amt == 0 {
-            return Err(io::Error::new(
-                io::ErrorKind::UnexpectedEof,
-                format!("read only {}/{} bytes", total, count),
-            ));
-        }
-        total += amt;
+fn read_exact_xxh<R: Read>(input: &mut R, count: u64) -> io::Result<u32> {
+    let mut writer = xxhio::Writer::new(io::sink());
+    let read = io::copy(&mut input.take(count), &mut writer)?;
+    if read == count {
+        Ok(writer.hash())
+    } else {
+        Err(io::Error::new(
+            io::ErrorKind::UnexpectedEof,
+            format!("read only {}/{} bytes", read, count),
+        ))
     }
-    Ok(reader.hash())
 }
 
 #[allow(clippy::comparison_chain)] // suppress lint on the "if part.offset < current_offset"
@@ -78,7 +71,7 @@ fn check_image(mut input: Input, q: bool) -> CmdResult {
         }
 
         // wrap the input to only read part.size bytes, then wrap that in a hash reader
-        let actual_xxh = read_exact_xxh(&mut input, part.size as usize)
+        let actual_xxh = read_exact_xxh(&mut input, part.size)
             .with_context(|| format!("failed to read data for part {}", i))?;
         if actual_xxh != part.xxh {
             return Err(anyhow!(
