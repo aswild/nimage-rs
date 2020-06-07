@@ -23,7 +23,7 @@ pub use anyhow::{anyhow, Context, Result};
 pub use clap::ArgMatches;
 use clap::{crate_version, App, AppSettings, Arg, SubCommand};
 
-use nimage::format::{NIMG_MAX_PARTS, NIMG_NAME_LEN, PART_TYPE_NAMES};
+use nimage::format::{COMP_MODE_NAMES, NIMG_MAX_PARTS, NIMG_NAME_LEN, PART_TYPE_NAMES};
 
 // exports to command modules
 pub type CmdResult = Result<()>;
@@ -62,12 +62,13 @@ fn get_handler(name: &str) -> CmdHandler {
 }
 
 fn main() {
-    // comma separated string listing all the valid part types
-    let part_types = PART_TYPE_NAMES.iter().map(|pair| pair.1).collect::<Vec<&str>>().join(", ");
+    // comma separated string listing all the valid part types. Skip the first "invalid" entry
+    let part_types = PART_TYPE_NAMES.iter().skip(1).map(|x| x.1).collect::<Vec<&str>>().join(", ");
+    let comp_modes = COMP_MODE_NAMES.iter().map(|x| x.1).collect::<Vec<&str>>().join(", ");
 
-    // To use format! anywhere in the help text, we have to create the app and call .matches() all
-    // in one statement or else we'll get errors about passing references to temporary objects.  If
-    // the app needs to be saved as a separate variable, then all the dynamically generated help
+    // To use format! anywhere in the help text, we have to create the app and call .get_matches()
+    // all in one statement or else we'll get errors about passing references to temporary objects.
+    // If the app needs to be saved as a separate variable, then all the dynamically generated help
     // text strings have to be created separately with a lifetime as long as the app.
     let args = App::new("mknImage")
         .version(crate_version!())
@@ -97,15 +98,18 @@ fn main() {
                         .help("Output filename. Must be a regular seekable file, not a pipe")
                 )
                 .arg(
-                    Arg::with_name("inputs")
-                        .value_name("TYPE:FILE")
+                    Arg::with_name("parts")
+                        .value_name("FILE:TYPE[:COMPRESSION]")
                         .required(true)
                         .multiple(true)
                         .min_values(1)
                         .max_values(NIMG_MAX_PARTS as u64)
-                        .help("List of input files to add to the image.")
+                        .help("List of parts to add to the image")
                 )
-                .after_help(format!("Valid part types are: {}", part_types).as_str())
+                .after_help(format!("Valid part types are: {}\n\
+                                     Valid compression modes are: {}\n\
+                                     If omitted, the default compression mode is 'none'.",
+                                    part_types, comp_modes).as_str())
         )
         .subcommand(
             SubCommand::with_name("check")

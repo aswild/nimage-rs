@@ -19,9 +19,6 @@ use nimage::xxhio;
 use crate::*;
 
 #[derive(Debug)]
-struct PartInput<'a>(PartType, &'a str);
-
-#[derive(Debug)]
 struct Output {
     path: PathBuf,
     file: File,
@@ -73,41 +70,67 @@ impl Drop for Output {
     }
 }
 
-fn parse_type_file(arg: &str) -> Result<PartInput> {
-    let colon = match arg.find(':') {
-        Some(x) => x,
-        None => return Err(anyhow!("invalid part argument '{}': missing ':'", arg)),
+#[derive(Debug)]
+struct PartInput<'a> {
+    filename: &'a str,
+    ptype: PartType,
+    comp: CompMode,
+}
+
+fn parse_input(arg: &str) -> Result<PartInput> {
+    // parse the format FILE:TYPE[:COMPRESSION] and validate that
+    //   1) FILE isn't an empty string
+    //   2) TYPE is a valid type
+    //   3) COMPRESSION, if specified is valid, if unspecified is CompMode::None
+    //   4) there's no trailing colon-separated items
+    // A side effect of this format is that FILE can't contain any ':' characters because
+    // they'll be mistaken for field separators.
+    let mut words = arg.split(':');
+
+    let filename = match words.next() {
+        Some("") => return Err(anyhow!("empty filename")),
+        Some(s) => s,
+        None => panic!(), // str.split() always returns at least one thing
     };
 
-    let (type_str, filename) = arg.split_at(colon);
-    let ptype = PartType::try_from(type_str)
-        .map_err(|_| anyhow!("invalid part argument '{}': invalid part type", arg))?;
-    if filename.len() < 2 {
-        // filename will contain the colon, make sure there's more stuff too
-        return Err(anyhow!("invalid part argument '{}': missing filename", arg));
+    let ptype = match words.next() {
+        Some(s) => PartType::try_from(s).map_err(|_| anyhow!("unrecognized part type '{}'", s))?,
+        None => return Err(anyhow!("missing part type")),
+    };
+
+    let comp = match words.next() {
+        Some(s) => {
+            CompMode::try_from(s).map_err(|_| anyhow!("unrecognized compression mode '{}'", s))?
+        }
+        None => CompMode::None,
+    };
+
+    if let Some(_) = words.next() {
+        return Err(anyhow!("trailing colon-delimited fields"));
     }
-    Ok(PartInput(ptype, &filename[1..]))
+
+    Ok(PartInput { filename, ptype, comp })
 }
 
 fn add_part(output: &mut Output, header: &mut ImageHeader, pinput: &PartInput) -> CmdResult {
     const ALIGN: u64 = 16;
-    let inpath = Path::new(pinput.1);
+    let inpath = Path::new(pinput.filename);
     let infile = File::open(&inpath)
-        .with_context(|| format!("Unable to open '{}' for reading", pinput.1))?;
+        .with_context(|| format!("Unable to open '{}' for reading", pinput.filename))?;
 
     let mut reader = xxhio::Reader::new(BufReader::new(infile));
-    debug!("Opened part input file '{}'", pinput.1);
+    debug!("Opened part input file '{}'", pinput.filename);
     let offset = output.count;
     debug!("start writing output at offset {}", offset);
     io::copy(&mut reader, output)?;
 
     let size = reader.total_len();
     let xxh = reader.hash();
-    // FIXME - add compression modes
-    let pheader = PartHeader { size, offset, ptype: pinput.0, comp: CompMode::None, xxh };
+    let pheader = PartHeader { size, offset, ptype: pinput.ptype, comp: pinput.comp, xxh };
     debug!("Created PartHeader {:?}", pheader);
 
-    println!("Part {}\n  file:   {}", header.parts.len(), pinput.1);
+    // note: the number of spaces here should match PartHeader::print_to() for alignment
+    println!("Part {}\n  file:        {}", header.parts.len(), pinput.filename);
     pheader.print_to(&mut io::stdout(), 2).unwrap_or(());
 
     let padding = (ALIGN - (size % ALIGN)) % ALIGN;
@@ -124,9 +147,9 @@ pub fn cmd_create(args: &ArgMatches) -> CmdResult {
     let image_name = args.value_of("name").unwrap_or("");
     let output_path = args.value_of("output").unwrap();
 
-    let mut input_parts: Vec<PartInput> = vec![];
-    for arg in args.values_of("inputs").unwrap() {
-        let part = parse_type_file(arg)?;
+    let mut input_parts = Vec::<PartInput>::new();
+    for arg in args.values_of("parts").unwrap() {
+        let part = parse_input(arg).with_context(|| format!("invalid part '{}'", arg))?;
         debug!("parsed input part {:?}", part);
         input_parts.push(part);
     }
