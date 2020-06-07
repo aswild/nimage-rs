@@ -70,6 +70,7 @@ pub enum PartValidError {
     BadSize(usize),
     BadMagic(u64),
     BadType(u8),
+    BadComp(u8),
     BadHash { expected: u32, actual: u32 },
 }
 
@@ -91,6 +92,9 @@ impl fmt::Display for PartValidError {
             }
             Self::BadType(t) => {
                 write!(f, "bad nImage part type {}", t)
+            }
+            Self::BadComp(c) => {
+                write!(f, "bad nImage part comp mode {}", c)
             }
             Self::BadHash { expected, actual } => {
                 write!(f, "invalid part data hash. Expected 0x{:08x}, found 0x{:08x}",

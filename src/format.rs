@@ -36,32 +36,27 @@ pub const NIMG_MAX_PARTS: usize = 27;
 #[repr(u8)]
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum PartType {
+    /// Invalid/undefined type
     Invalid = 0,
+    /// Filesystem image for /boot, should be FAT for Raspberry Pi
     BootImg,
+    /// Filesystem contents to be extrated to /boot
     BootTar,
-    BootTarGz,
-    BootTarXz,
+    /// Filesystem image for the rootfs that should be mounted read-only
     Rootfs,
+    /// Filesystem image for the rootfs that should be mounted read-write
     RootfsRw,
-    BootImgGz,
-    BootImgXz,
-    BootImgZstd,
 }
 // Safety! Keep this up to date
-const PART_TYPE_LAST: PartType = PartType::BootImgZstd;
+const PART_TYPE_LAST: PartType = PartType::RootfsRw;
 
 /// list of part type names, used for Display and TryFrom<&str>
 pub static PART_TYPE_NAMES: [(PartType, &str); PART_TYPE_LAST as usize + 1] = [
     (PartType::Invalid, "invalid"),
     (PartType::BootImg, "boot_img"),
     (PartType::BootTar, "boot_tar"),
-    (PartType::BootTarGz, "boot_tar_gz"),
-    (PartType::BootTarXz, "boot_tar_xz"),
     (PartType::Rootfs, "rootfs"),
     (PartType::RootfsRw, "rootfs_rw"),
-    (PartType::BootImgGz, "boot_img_gz"),
-    (PartType::BootImgXz, "boot_img_xz"),
-    (PartType::BootImgZstd, "boot_img_zstd"),
 ];
 
 impl PartType {
@@ -73,6 +68,12 @@ impl PartType {
             PartType::Invalid => Err(PartValidError::BadType(PartType::Invalid as u8)),
             x => Ok(x),
         })
+    }
+}
+
+impl Default for PartType {
+    fn default() -> Self {
+        Self::Invalid
     }
 }
 
@@ -121,6 +122,73 @@ impl fmt::Display for PartType {
     }
 }
 
+#[repr(u8)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+pub enum CompMode {
+    /// Part is uncompressed
+    None = 0,
+    /// Part is compressed with zstd
+    Zstd,
+    /// Part is compressed with an unspecified format that's readable by libarchive(3) or
+    /// bsdcat(1), but otherwise opaque to nimage-rs. See archive_read_filter(3).
+    LibArchive,
+}
+// Safety! Keep this up to date
+const COMP_MODE_LAST: CompMode = CompMode::LibArchive;
+
+/// list of comp modes used for Display and TryFrom<&str>
+#[rustfmt::skip]
+pub static COMP_MODE_NAMES: [(CompMode, &str); COMP_MODE_LAST as usize + 1] = [
+    (CompMode::None, "none"),
+    (CompMode::Zstd, "zstd"),
+    (CompMode::LibArchive, "libarchive"),
+];
+
+impl Default for CompMode {
+    fn default() -> Self {
+        CompMode::None
+    }
+}
+
+impl TryFrom<u8> for CompMode {
+    type Error = PartValidError;
+    /**
+     * Convert a u8 into a CompMode, return Err on an unrecognized mode.
+     */
+    fn try_from(val: u8) -> Result<Self, Self::Error> {
+        if val <= (COMP_MODE_LAST as u8) {
+            // safe because CompMode is repr(u8) and we did a bounds check
+            Ok(unsafe { std::mem::transmute(val) })
+        } else {
+            Err(PartValidError::BadComp(val))
+        }
+    }
+}
+
+impl TryFrom<&str> for CompMode {
+    type Error = ();
+    fn try_from(name: &str) -> Result<Self, Self::Error> {
+        for (t, n) in COMP_MODE_NAMES.iter() {
+            if name == *n {
+                return Ok(*t);
+            }
+        }
+        Err(())
+    }
+}
+
+impl fmt::Display for CompMode {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        for (t, n) in COMP_MODE_NAMES.iter() {
+            if self == t {
+                return f.write_str(n);
+            }
+        }
+        // if we get here, then COMP_MODE_NAMES is messed up
+        panic!("Missing display name for CompMode {:?}", self);
+    }
+}
+
 /**
  * The main nImage header struct, in native Rust types. In C this is a packed
  * struct that can be directly read from the file, but that's not so in Rust.
@@ -144,11 +212,17 @@ pub struct ImageHeader {
     // 4 byte xxHash32 checksum of the rest of the image header data
 }
 
+impl Default for ImageHeader {
+    fn default() -> Self {
+        ImageHeader { version: NIMG_CURRENT_VERSION, name: String::new(), parts: Vec::new() }
+    }
+}
+
 /**
  * Struct representing the subheader for each nImage part, using native Rust types
  * rather than a packed representation of the on-disk format.
  */
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct PartHeader {
     // 8 byte magic "NIMGPART"
     /// size of the part data
@@ -160,7 +234,10 @@ pub struct PartHeader {
     /// part type (1 byte)
     pub ptype: PartType,
 
-    // 3 unused bytes
+    /// compression mode (1 byte)
+    pub comp: CompMode,
+
+    // 2 unused bytes
     /// 4 byte xxHash32 checksum of the image data
     pub xxh: u32,
 }
@@ -309,7 +386,8 @@ impl ImageHeader {
      * e.g. extracted from the original image, since the hash isn't saved in ImageHeader itself.
      */
     pub fn print_to<W: Write>(&self, w: &mut W, xxh: Option<u32>) -> io::Result<()> {
-        writeln!(w, "Image Name:      {}", self.name)?;
+        let name = if self.name.is_empty() { "[empty]" } else { self.name.as_str() };
+        writeln!(w, "Image Name:      {}", name)?;
         writeln!(w, "Image Version:   {}", self.version)?;
         writeln!(w, "Number of Parts: {}", self.parts.len())?;
         if let Some(xxh) = xxh {
@@ -326,13 +404,6 @@ impl ImageHeader {
 
 impl PartHeader {
     /**
-     * Create a new empty nImage part header with the given type.
-     */
-    pub fn new(ptype: PartType) -> Self {
-        PartHeader { size: 0, offset: 0, ptype, xxh: 0 }
-    }
-
-    /**
      * Parse and validate an nImage part header read from disk.
      * Data must be exactly NIMG_PHDR_SIZE (32) bytes long.
      */
@@ -341,7 +412,7 @@ impl PartHeader {
             return Err(PartValidError::BadSize(buf.len()));
         }
 
-        let mut header = PartHeader::new(PartType::Invalid);
+        let mut header = PartHeader::default();
         let mut reader = Cursor::new(buf);
 
         let magic = reader.read_u64_le().unwrap();
@@ -352,8 +423,9 @@ impl PartHeader {
         header.size = reader.read_u64_le().unwrap();
         header.offset = reader.read_u64_le().unwrap();
         header.ptype = PartType::from_u8_valid(reader.read_byte().unwrap())?;
+        header.comp = CompMode::try_from(reader.read_byte().unwrap())?;
 
-        reader.skip(3);
+        reader.skip(2);
         header.xxh = reader.read_u32_le().unwrap();
 
         Ok(header)
@@ -369,7 +441,8 @@ impl PartHeader {
         writer.write_u64_le(self.size)?;
         writer.write_u64_le(self.offset)?;
         writer.write_byte(self.ptype as u8)?;
-        writer.write_zeros(3)?;
+        writer.write_byte(self.comp as u8)?;
+        writer.write_zeros(2)?;
         writer.write_u32_le(self.xxh)?;
         Ok(())
     }
@@ -380,10 +453,11 @@ impl PartHeader {
      */
     pub fn print_to<W: Write>(&self, w: &mut W, indent: usize) -> io::Result<()> {
         let indent = " ".repeat(indent);
-        writeln!(w, "{}type:   {}", indent, self.ptype)?;
-        writeln!(w, "{}size:   {}", indent, human_size_extended(self.size))?;
-        writeln!(w, "{}offset: {}", indent, human_size_extended(self.offset))?;
-        writeln!(w, "{}xxHash: 0x{:08x}", indent, self.xxh)?;
+        writeln!(w, "{}type:        {}", indent, self.ptype)?;
+        writeln!(w, "{}compression: {}", indent, self.comp)?;
+        writeln!(w, "{}size:        {}", indent, human_size_extended(self.size))?;
+        writeln!(w, "{}offset:      {}", indent, human_size_extended(self.offset))?;
+        writeln!(w, "{}xxHash:      0x{:08x}", indent, self.xxh)?;
         Ok(())
     }
 }

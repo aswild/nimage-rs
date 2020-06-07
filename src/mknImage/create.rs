@@ -103,7 +103,8 @@ fn add_part(output: &mut Output, header: &mut ImageHeader, pinput: &PartInput) -
 
     let size = reader.total_len();
     let xxh = reader.hash();
-    let pheader = PartHeader { size, offset, ptype: pinput.0, xxh };
+    // FIXME - add compression modes
+    let pheader = PartHeader { size, offset, ptype: pinput.0, comp: CompMode::None, xxh };
     debug!("Created PartHeader {:?}", pheader);
 
     println!("Part {}\n  file:   {}", header.parts.len(), pinput.1);
