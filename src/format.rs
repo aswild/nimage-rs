@@ -467,49 +467,51 @@ mod tests {
     use super::*;
     use crate::assert_matches;
 
-    #[rustfmt::skip]
-    const GOOD_HEADER_START: [u8; 208] = [
-        0x4e, 0x45, 0x57, 0x42, 0x53, 0x49, 0x4d, 0x47, 0x03, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-        0x63, 0x6f, 0x72, 0x65, 0x2d, 0x69, 0x6d, 0x61, 0x67, 0x65, 0x2d, 0x6e, 0x65, 0x77, 0x62, 0x73,
-        0x2d, 0x72, 0x61, 0x73, 0x70, 0x62, 0x65, 0x72, 0x72, 0x79, 0x70, 0x69, 0x34, 0x2d, 0x36, 0x34,
-        0x2d, 0x32, 0x30, 0x32, 0x30, 0x30, 0x35, 0x30, 0x31, 0x32, 0x32, 0x32, 0x38, 0x32, 0x37, 0x2e,
-        0x73, 0x71, 0x75, 0x61, 0x73, 0x68, 0x66, 0x73, 0x2d, 0x7a, 0x73, 0x74, 0x64, 0x00, 0x00, 0x00,
-        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-        0x4e, 0x49, 0x4d, 0x47, 0x50, 0x41, 0x52, 0x54, 0xe0, 0xee, 0x91, 0x00, 0x00, 0x00, 0x00, 0x00,
-        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x09, 0x00, 0x00, 0x00, 0x21, 0x28, 0x7c, 0xcd,
-        0x4e, 0x49, 0x4d, 0x47, 0x50, 0x41, 0x52, 0x54, 0x00, 0xe0, 0xb0, 0x06, 0x00, 0x00, 0x00, 0x00,
-        0xe0, 0xee, 0x91, 0x00, 0x00, 0x00, 0x00, 0x00, 0x05, 0x00, 0x00, 0x00, 0x38, 0xf9, 0xc5, 0x1f,
-    ];
-    const GOOD_HEADER_HASH: [u8; 4] = [0xda, 0xab, 0xee, 0xdd];
+    const GOOD_HEADER_START: &[u8] = b"\
+        \x4e\x45\x57\x42\x53\x49\x4d\x47\x03\x02\x00\x00\x00\x00\x00\x00\
+        \x32\x30\x32\x30\x2d\x30\x35\x2d\x32\x37\x2d\x72\x61\x73\x70\x69\
+        \x6f\x73\x2d\x62\x75\x73\x74\x65\x72\x2d\x6c\x69\x74\x65\x2d\x61\
+        \x72\x6d\x68\x66\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\
+        \x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\
+        \x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\
+        \x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\
+        \x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\
+        \x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\
+        \x4e\x49\x4d\x47\x50\x41\x52\x54\x38\xe8\xdb\x01\x00\x00\x00\x00\
+        \x00\x00\x00\x00\x00\x00\x00\x00\x01\x01\x00\x00\x70\x86\x4b\xe7\
+        \x4e\x49\x4d\x47\x50\x41\x52\x54\x00\x50\x23\x14\x00\x00\x00\x00\
+        \x40\xe8\xdb\x01\x00\x00\x00\x00\x03\x00\x00\x00\x41\x68\x84\xb6\
+    ";
+
+    const GOOD_HEADER_HASH: &[u8] = b"\x6c\xf6\x52\xc2";
 
     fn good_header_bytes() -> [u8; NIMG_HDR_SIZE] {
         // construct the full header array at runtime so we don't have a page worth of zero bytes
         // in the source code
         let mut arr = [0u8; NIMG_HDR_SIZE];
-        (&mut arr[..GOOD_HEADER_START.len()]).copy_from_slice(&GOOD_HEADER_START);
-        (&mut arr[(NIMG_HDR_SIZE - 4)..]).copy_from_slice(&GOOD_HEADER_HASH);
+        (&mut arr[..GOOD_HEADER_START.len()]).copy_from_slice(GOOD_HEADER_START);
+        (&mut arr[(NIMG_HDR_SIZE - 4)..]).copy_from_slice(GOOD_HEADER_HASH);
         arr
     }
 
     fn good_header_obj() -> ImageHeader {
         ImageHeader {
             version: NIMG_CURRENT_VERSION,
-            name: String::from("core-image-newbs-raspberrypi4-64-20200501222827.squashfs-zstd"),
+            name: String::from("2020-05-27-raspios-buster-lite-armhf"),
             parts: vec![
                 PartHeader {
-                    size: 0x0091eee0,
+                    size: 0x1dbe838,
                     offset: 0,
-                    ptype: PartType::BootImgZstd,
-                    xxh: 0xcd7c2821,
+                    ptype: PartType::BootImg,
+                    comp: CompMode::Zstd,
+                    xxh: 0xe74b8670,
                 },
                 PartHeader {
-                    size: 0x06b0e000,
-                    offset: 0x0091eee0,
+                    size: 0x14235000,
+                    offset: 0x1dbe840,
                     ptype: PartType::Rootfs,
-                    xxh: 0x1fc5f938,
+                    comp: CompMode::None,
+                    xxh: 0xb6846841,
                 },
             ],
         }
@@ -529,7 +531,7 @@ mod tests {
         data[0] = 0x4e;
         data[0xb0] = 0;
         // fix the main hash to match the broken phdr data
-        (&mut data[(NIMG_HDR_SIZE - 4)..]).copy_from_slice(&[0xf3, 0xb6, 0xd8, 0x7c]);
+        (&mut data[(NIMG_HDR_SIZE - 4)..]).copy_from_slice(&0x03031f18_u32.to_le_bytes());
         // expect a specific BadMagic error
         let expected_err = ImageValidError::InvalidPart {
             index: 1,

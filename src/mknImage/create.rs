@@ -105,7 +105,7 @@ fn parse_input(arg: &str) -> Result<PartInput> {
         None => CompMode::None,
     };
 
-    if let Some(_) = words.next() {
+    if words.next().is_some() {
         return Err(anyhow!("trailing colon-delimited fields"));
     }
 
