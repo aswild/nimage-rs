@@ -23,17 +23,17 @@ pub fn xxhash32(buf: &[u8]) -> u32 {
  * Encapsulate any reader, and calculate a xxHash32 on all bytes read.
  * The generic type R must implement std::Read.
  */
-pub struct Reader<R> {
-    inner: R,
+pub struct Reader<'a> {
+    inner: Box<dyn Read + 'a>,
     xxh: XxHash32,
 }
 
-impl<R: Read> Reader<R> {
+impl<'a> Reader<'a> {
     /**
      * Create a new xxHash32 reader, taking ownership of the inner reader.
      */
-    pub fn new(inner: R) -> Self {
-        Reader { inner, xxh: XxHash32::with_seed(0) }
+    pub fn new<R: Read + 'a>(inner: R) -> Self {
+        Reader { inner: Box::new(inner), xxh: XxHash32::with_seed(0) }
     }
 
     /**
@@ -51,15 +51,15 @@ impl<R: Read> Reader<R> {
     }
 
     /**
-     * Consume this object and return the inner reader.
+     * Consume this object and return the inner boxed reader.
      * The hash data will be lost, so call hash() before this if needed.
      */
-    pub fn into_inner(self) -> R {
+    pub fn into_inner(self) -> Box<dyn Read + 'a> {
         self.inner
     }
 }
 
-impl<R: Read> Read for Reader<R> {
+impl<'a> Read for Reader<'a> {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         // first read into buf from the inner reader, then update the hash.
         // This doesn't violate "if an error is returned then it must be guaranteed
@@ -76,17 +76,17 @@ impl<R: Read> Read for Reader<R> {
  * Encapsulate any writer, and calculate a xxHash32 on all bytes read.
  * The generic type W must implement std::Write.
  */
-pub struct Writer<W> {
-    inner: W,
+pub struct Writer<'a> {
+    inner: Box<dyn Write + 'a>,
     xxh: XxHash32,
 }
 
-impl<W: Write> Writer<W> {
+impl<'a> Writer<'a> {
     /**
      * Create a new xxHash32 writer, taking ownership of the inner writer.
      */
-    pub fn new(inner: W) -> Self {
-        Writer { inner, xxh: XxHash32::with_seed(0) }
+    pub fn new<W: Write + 'a>(inner: W) -> Self {
+        Writer { inner: Box::new(inner), xxh: XxHash32::with_seed(0) }
     }
 
     /**
@@ -104,15 +104,15 @@ impl<W: Write> Writer<W> {
     }
 
     /**
-     * Consume this object and return the inner writer.
+     * Consume this object and return the inner boxed writer.
      * The hash data will be lost, so call hash() before this if needed.
      */
-    pub fn into_inner(self) -> W {
+    pub fn into_inner(self) -> Box<dyn Write + 'a> {
         self.inner
     }
 }
 
-impl<W: Write> Write for Writer<W> {
+impl<'a> Write for Writer<'a> {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
         let ret = self.inner.write(buf);
         if let Ok(count) = ret {
