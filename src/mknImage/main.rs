@@ -74,6 +74,7 @@ fn main() {
         .version(crate_version!())
         .about("Build and manipulate nImage files")
         .max_term_width(100)
+        .global_setting(AppSettings::ColoredHelp)
         .setting(AppSettings::SubcommandRequired)
         .arg(
             Arg::with_name("debug")
