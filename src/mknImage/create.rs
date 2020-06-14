@@ -10,7 +10,9 @@ use std::convert::TryFrom;
 use std::fs::{self, File};
 use std::io::prelude::*;
 use std::io::{self, BufReader, SeekFrom};
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
+
+use zstd::stream::read::Encoder as ZstdReadEncoder;
 
 use nimage::format::*;
 use nimage::util::WriteHelper;
@@ -75,6 +77,7 @@ struct PartInput<'a> {
     filename: &'a str,
     ptype: PartType,
     comp: CompMode,
+    auto_comp: Option<i32>,
 }
 
 fn parse_input(arg: &str) -> Result<PartInput> {
@@ -98,27 +101,58 @@ fn parse_input(arg: &str) -> Result<PartInput> {
         None => return Err(anyhow!("missing part type")),
     };
 
-    let comp = match words.next() {
+    let (comp, auto_comp) = match words.next() {
         Some(s) => {
-            CompMode::try_from(s).map_err(|_| anyhow!("unrecognized compression mode '{}'", s))?
+            let mut compwords = s.splitn(2, '+');
+            let typestr = compwords.next().unwrap();
+            let comp = CompMode::try_from(typestr)
+                .map_err(|_| anyhow!("unrecognized compression mode '{}'", typestr))?;
+
+            if comp == CompMode::Zstd {
+                let auto_comp = match compwords.next() {
+                    Some("") => Some(15i32), // default zstd level
+                    Some(x) => {
+                        let level = x
+                            .parse::<i32>()
+                            .map_err(|_| anyhow!("bad zstd compression level '{}'", x))?;
+                        Some(level)
+                    }
+                    None => None,
+                };
+                (comp, auto_comp)
+            } else {
+                if compwords.next().is_some() {
+                    eprintln!("Warning: ignoring auto-compression specifier on non-zstd part");
+                }
+                (comp, None)
+            }
         }
-        None => CompMode::None,
+        None => (CompMode::None, None),
     };
 
     if words.next().is_some() {
         return Err(anyhow!("trailing colon-delimited fields"));
     }
 
-    Ok(PartInput { filename, ptype, comp })
+    Ok(PartInput { filename, ptype, comp, auto_comp })
 }
 
 fn add_part(output: &mut Output, header: &mut ImageHeader, pinput: &PartInput) -> CmdResult {
     const ALIGN: u64 = 16;
-    let inpath = Path::new(pinput.filename);
-    let infile = File::open(&inpath)
+    let infile = File::open(pinput.filename)
         .with_context(|| format!("Unable to open '{}' for reading", pinput.filename))?;
 
-    let mut reader = xxhio::Reader::new(BufReader::new(infile));
+    let mut reader = match pinput.auto_comp {
+        Some(level) => {
+            debug!("compressing part '{}' with zstd level {}", pinput.filename, level);
+            let mut zenc = ZstdReadEncoder::new(BufReader::new(infile), level)?;
+            // try to enable multithreading, but ignore errors if it doesn't work
+            let _ = zenc.multithread(num_cpus::get() as u32);
+            xxhio::Reader::new(zenc)
+        }
+        None => xxhio::Reader::new(BufReader::new(infile)),
+    };
+
     debug!("Opened part input file '{}'", pinput.filename);
     let offset = output.count;
     debug!("start writing output at offset {}", offset);

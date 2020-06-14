@@ -108,7 +108,11 @@ fn main() {
                 )
                 .after_help(format!("Valid part types are: {}\n\
                                      Valid compression modes are: {}\n\
-                                     If omitted, the default compression mode is 'none'.",
+                                     If omitted, the default compression mode is 'none'.\n\
+                                     If the zstd compression mode is specified as 'zstd+' or 'zstd+N', \
+                                     mknImage will assume the input file is uncompressed and compress it \
+                                     with zstd level N (default 15), otherwise it's assumed the part is \
+                                     already compressed.",
                                     part_types, comp_modes).as_str())
         )
         .subcommand(
