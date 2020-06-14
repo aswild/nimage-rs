@@ -8,12 +8,14 @@ edition = "2018"
 [dependencies]
 anyhow = "1.0.31"
 clap = "2.33.1"
+num_cpus = "1.13.0"
+zstd = { version="0.5.3", features=["zstdmt"] }
 
 [dependencies.twox-hash]
-# Use forked twox-hash to get XxHash32::total_len_64(); hopefully my PR gets merged.
-# Turn off default std feature which pulls in the rand crate as a dependency.
-git = "https://github.com/aswild/twox-hash"
-branch = "pr/xxh32-total64"
+# pin to master until there's a new release
+git = "https://github.com/shepmaster/twox-hash"
+rev = "ef4afb445973d7dcccb793f7f5ea1e2216658f24"
+# disable "std" to avoid dependency on rand
 default-features = false
 
 [[bin]]
