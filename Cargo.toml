@@ -4,12 +4,26 @@ version = "0.2.0-dev"
 authors = ["Allen Wild <allenwild93@gmail.com>"]
 license = "GPL-3.0-or-later"
 edition = "2018"
+default-run = "mknImage"
+
+[[bin]]
+name = "mknImage"
+path = "src/mknImage/main.rs"
+
+[[bin]]
+name = "swdl"
+path = "src/swdl/main.rs"
 
 [dependencies]
 anyhow = "1.0.31"
 clap = "2.33.1"
 num_cpus = "1.13.0"
-zstd = { version="0.5.3", features=["zstdmt"] }
+zstd = { version = "0.5.3", features = ["zstdmt"] }
+
+# future deps for swdl
+#fstab = "0.4.0"
+#indicatif = "0.15.0"
+#tempfile = "3.1.0"
 
 [dependencies.twox-hash]
 # pin to master until there's a new release
@@ -17,7 +31,3 @@ git = "https://github.com/shepmaster/twox-hash"
 rev = "ef4afb445973d7dcccb793f7f5ea1e2216658f24"
 # disable "std" to avoid dependency on rand
 default-features = false
-
-[[bin]]
-name = "mknImage"
-path = "src/mknImage/main.rs"
