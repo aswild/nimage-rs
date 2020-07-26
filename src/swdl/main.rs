@@ -6,6 +6,7 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
+mod flashbanks;
 mod input;
 
 use std::process::exit;
