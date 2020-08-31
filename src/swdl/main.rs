@@ -10,8 +10,8 @@ mod input;
 
 use std::process::exit;
 
-pub use anyhow::{anyhow, Context, Result};
-pub use clap::ArgMatches;
+use anyhow::{anyhow, Context, Result};
+use clap::ArgMatches;
 use clap::{crate_version, App, AppSettings, Arg};
 
 use input::Input;

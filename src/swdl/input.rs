@@ -12,7 +12,9 @@ use std::io::{self, BufReader, Read};
 use std::os::unix::process::ExitStatusExt;
 use std::process::{Child, Command, Stdio};
 
-use crate::*;
+use anyhow::Result;
+
+use crate::{debug, DEBUG_ENABLED};
 
 #[derive(Debug)]
 pub struct FileInfo {

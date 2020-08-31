@@ -9,11 +9,14 @@
 use std::io::prelude::*;
 use std::io::{self, Cursor, SeekFrom};
 
+use anyhow::{anyhow, Context};
+use clap::ArgMatches;
+
 use nimage::format::*;
 use nimage::util::*;
 use nimage::xxhio;
 
-use crate::*;
+use crate::CmdResult;
 
 macro_rules! qprintln {
     ($quiet:expr, $($arg:tt)*) => {

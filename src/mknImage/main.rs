@@ -16,17 +16,12 @@ mod check;
 mod create;
 mod hash;
 
-use std::convert::From;
-use std::process::exit;
-
-pub use anyhow::{anyhow, Context, Result};
-pub use clap::ArgMatches;
-use clap::{crate_version, App, AppSettings, Arg, SubCommand};
+use clap::{crate_version, App, AppSettings, Arg, ArgMatches, SubCommand};
 
 use nimage::format::{COMP_MODE_NAMES, NIMG_MAX_PARTS, NIMG_NAME_LEN, PART_TYPE_NAMES};
 
 // exports to command modules
-pub type CmdResult = Result<()>;
+pub type CmdResult = anyhow::Result<()>;
 pub type CmdHandler = fn(&ArgMatches) -> CmdResult;
 
 // debug log flag as a global variable. safe beacuse we're single-threaded and this gets set only
@@ -156,6 +151,6 @@ fn main() {
         if !err.to_string().is_empty() {
             eprintln!("Error: {:#}", err);
         }
-        exit(1);
+        std::process::exit(1);
     }
 }

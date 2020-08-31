@@ -12,13 +12,15 @@ use std::io::prelude::*;
 use std::io::{self, BufReader, SeekFrom};
 use std::path::PathBuf;
 
+use anyhow::{anyhow, Context, Result};
+use clap::ArgMatches;
 use zstd::stream::read::Encoder as ZstdReadEncoder;
 
 use nimage::format::*;
 use nimage::util::WriteHelper;
 use nimage::xxhio;
 
-use crate::*;
+use crate::{CmdResult, debug, DEBUG_ENABLED};
 
 #[derive(Debug)]
 struct Output {

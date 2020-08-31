@@ -8,10 +8,13 @@
 
 use std::io;
 
+use anyhow::anyhow;
+use clap::ArgMatches;
+
 use nimage::util::Input;
 use nimage::xxhio::Reader;
 
-use crate::*;
+use crate::CmdResult;
 
 pub fn cmd_hash(args: &ArgMatches) -> CmdResult {
     let input = Input::open_file_or_stdin(args.value_of("FILE").unwrap_or("-"))?;
