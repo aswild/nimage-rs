@@ -15,8 +15,8 @@ name = "swdl"
 path = "src/swdl/main.rs"
 
 [dependencies]
-anyhow = "1.0.31"
-clap = "2.33.1"
+anyhow = "1.0.32"
+clap = "2.33.3"
 num_cpus = "1.13.0"
 zstd = { version = "0.5.3", features = ["zstdmt"] }
 
