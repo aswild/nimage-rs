@@ -16,9 +16,9 @@ mod check;
 mod create;
 mod hash;
 
-//use std::cmp::{Ord, Ordering};
+use std::cmp::Ordering;
 
-use clap::{crate_version, App, AppSettings, Arg, ArgMatches, SubCommand};
+use clap::{crate_version, App, AppSettings, Arg, ArgMatches, ArgSettings, SubCommand};
 use yall::{log_macros::*, LevelFilter, Logger};
 
 use nimage::format::{COMP_MODE_NAMES, NIMG_MAX_PARTS, NIMG_NAME_LEN, PART_TYPE_NAMES};
@@ -55,7 +55,18 @@ fn main() {
             Arg::with_name("debug")
                 .short("D")
                 .long("debug")
-                .help("Enable extra debug output")
+                .multiple(true)
+                .set(ArgSettings::Global)
+                .help("Enable extra debug output. Use -D twice for extra trace output.")
+        )
+        .arg(
+            Arg::with_name("quiet")
+                .short("q")
+                .long("quiet")
+                .multiple(true)
+                .set(ArgSettings::Global)
+                .conflicts_with("debug")
+                .help("Show only warnings & errors. Use -q twice for silent output.")
         )
         .subcommand(
             SubCommand::with_name("create")
@@ -99,14 +110,6 @@ fn main() {
                         .required(false)
                         .help("Input file. Read from stdin if FILE isn't present or is '-'")
                 )
-                .arg(
-                    Arg::with_name("quiet")
-                        .short("q")
-                        .long("quiet")
-                        .multiple(true)
-                        .help("Only check for errors, don't dump info. \
-                               Pass -q twice to suppress printing errors and only use the exit code.")
-                ),
         )
         .subcommand(
             SubCommand::with_name("hash")
@@ -119,23 +122,20 @@ fn main() {
         )
         .get_matches();
 
+    Logger::with_level(
+        match (args.occurrences_of("debug").cmp(&1), args.occurrences_of("quiet").cmp(&1)) {
+            (_, Ordering::Equal) => LevelFilter::Warn,    // -q
+            (_, Ordering::Greater) => LevelFilter::Off,   // -qq
+            (Ordering::Equal, _) => LevelFilter::Debug,   // -D
+            (Ordering::Greater, _) => LevelFilter::Trace, // -DD
+            (_, _) => LevelFilter::Info,
+        },
+    )
+    .init();
+    debug!("debug logging enabled");
+
     let (subname, subargs) = args.subcommand();
     let subargs = subargs.unwrap();
-
-    // figure out the log level
-    let mut log_level =
-        if args.is_present("debug") { LevelFilter::Debug } else { LevelFilter::Info };
-    // special case for the check command's quiet modes
-    if subname == "check" {
-        let quiet = subargs.occurrences_of("quiet");
-        if quiet > 1 {
-            log_level = LevelFilter::Off;
-        } else if quiet == 1 {
-            log_level = LevelFilter::Warn;
-        }
-    }
-    Logger::with_level(log_level).init();
-    debug!("debug logging enabled");
 
     if let Err(err) = get_handler(subname)(subargs) {
         error!("{:#}", err);

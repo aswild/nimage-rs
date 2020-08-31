@@ -11,18 +11,13 @@ use std::io::{self, Cursor, SeekFrom};
 
 use anyhow::{anyhow, Context};
 use clap::ArgMatches;
+use yall::log_macros::*;
 
 use nimage::format::*;
 use nimage::util::*;
 use nimage::xxhio;
 
 use crate::CmdResult;
-
-macro_rules! qprintln {
-    ($quiet:expr, $($arg:tt)*) => {
-        if !$quiet { println!($($arg)*) }
-    }
-}
 
 /// Read the last 4 bytes of buf as a u32le. Panics if buf isn't at least 4 bytes long
 fn last_u32(buf: &[u8]) -> u32 {
@@ -46,17 +41,18 @@ fn read_exact_xxh<R: Read>(input: &mut R, count: u64) -> io::Result<u32> {
 }
 
 #[allow(clippy::comparison_chain)] // suppress lint on the "if part.offset < current_offset"
-fn check_image(mut input: Input, q: bool) -> CmdResult {
-    qprintln!(q, "{}:", input);
+pub fn cmd_check(args: &ArgMatches) -> CmdResult {
+    let mut input = Input::open_file_or_stdin(args.value_of("FILE").unwrap_or("-"))?;
+    info!("{}:", input);
     let mut header_bytes = [0u8; NIMG_HDR_SIZE];
     input.read_exact(&mut header_bytes)?;
     let header = ImageHeader::from_bytes(&header_bytes)?;
 
-    if !q {
-        // header doesn't store its xxh, get it from the original buffer
-        let xxh = last_u32(&header_bytes);
-        header.print_to(&mut io::stdout(), Some(xxh))?;
-    }
+    // header doesn't store its xxh, get it from the original buffer
+    let xxh = last_u32(&header_bytes);
+    let mut header_str = Vec::<u8>::new();
+    header.print_to(&mut header_str, Some(xxh))?;
+    info!("{}", std::str::from_utf8(&header_str).unwrap());
 
     // validate all the parts' data
     let mut current_offset = 0u64;
@@ -88,19 +84,6 @@ fn check_image(mut input: Input, q: bool) -> CmdResult {
         current_offset += part.size;
     }
 
-    qprintln!(q, "Image check SUCCESS");
+    info!("Image check SUCCESS");
     Ok(())
-}
-
-pub fn cmd_check(args: &ArgMatches) -> CmdResult {
-    let quiet_level = args.occurrences_of("quiet");
-    let input = Input::open_file_or_stdin(args.value_of("FILE").unwrap_or("-"))?;
-
-    let ret = check_image(input, quiet_level > 0);
-    if quiet_level >= 2 {
-        // silent mode, hide the error messasge, but still return error
-        ret.map_err(|_| anyhow!(""))
-    } else {
-        ret
-    }
 }
