@@ -14,13 +14,14 @@ use std::path::PathBuf;
 
 use anyhow::{anyhow, Context, Result};
 use clap::ArgMatches;
+use yall::log_macros::*;
 use zstd::stream::read::Encoder as ZstdReadEncoder;
 
 use nimage::format::*;
 use nimage::util::WriteHelper;
 use nimage::xxhio;
 
-use crate::{CmdResult, debug, DEBUG_ENABLED};
+use crate::CmdResult;
 
 #[derive(Debug)]
 struct Output {
@@ -124,7 +125,7 @@ fn parse_input(arg: &str) -> Result<PartInput> {
                 (comp, auto_comp)
             } else {
                 if compwords.next().is_some() {
-                    eprintln!("Warning: ignoring auto-compression specifier on non-zstd part");
+                    warn!("ignoring auto-compression specifier on non-zstd part");
                 }
                 (comp, None)
             }
@@ -165,9 +166,15 @@ fn add_part(output: &mut Output, header: &mut ImageHeader, pinput: &PartInput) -
     let pheader = PartHeader { size, offset, ptype: pinput.ptype, comp: pinput.comp, xxh };
     debug!("Created PartHeader {:?}", pheader);
 
+    let mut pheader_str = Vec::<u8>::new();
+    pheader.print_to(&mut pheader_str, 2).unwrap();
     // note: the number of spaces here should match PartHeader::print_to() for alignment
-    println!("Part {}\n  file:        {}", header.parts.len(), pinput.filename);
-    pheader.print_to(&mut io::stdout(), 2).unwrap_or(());
+    info!(
+        "Part {}\n  file:        {}\n{}",
+        header.parts.len(),
+        pinput.filename,
+        std::str::from_utf8(&pheader_str).unwrap()
+    );
 
     let padding = (ALIGN - (size % ALIGN)) % ALIGN;
     if padding > 0 {
@@ -190,8 +197,8 @@ pub fn cmd_create(args: &ArgMatches) -> CmdResult {
         input_parts.push(part);
     }
 
-    println!("Creating image {}", output_path);
-    println!("Image name is '{}'", image_name);
+    info!("Creating image {}", output_path);
+    info!("Image name is '{}'", image_name);
 
     // input is parsed, open the output file
     let mut output = Output::new(&output_path)

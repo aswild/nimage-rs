@@ -13,8 +13,7 @@ use std::os::unix::process::ExitStatusExt;
 use std::process::{Child, Command, Stdio};
 
 use anyhow::Result;
-
-use crate::{debug, DEBUG_ENABLED};
+use yall::log_macros::*;
 
 #[derive(Debug)]
 pub struct FileInfo {

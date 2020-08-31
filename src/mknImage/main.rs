@@ -16,36 +16,16 @@ mod check;
 mod create;
 mod hash;
 
+//use std::cmp::{Ord, Ordering};
+
 use clap::{crate_version, App, AppSettings, Arg, ArgMatches, SubCommand};
+use yall::{log_macros::*, LevelFilter, Logger};
 
 use nimage::format::{COMP_MODE_NAMES, NIMG_MAX_PARTS, NIMG_NAME_LEN, PART_TYPE_NAMES};
 
 // exports to command modules
 pub type CmdResult = anyhow::Result<()>;
 pub type CmdHandler = fn(&ArgMatches) -> CmdResult;
-
-// debug log flag as a global variable. safe beacuse we're single-threaded and this gets set only
-// once at program startup.
-static mut DEBUG_ENABLED: bool = false;
-
-/// write a formatted message to stderr, prefixed with "[DEBUG FILE:LINE] ".
-/// This simple version uses a static global boolean
-#[macro_export]
-macro_rules! debug {
-    ($($arg:tt)*) => {
-        if unsafe { DEBUG_ENABLED } {
-            let mut filename = file!();
-            if filename.starts_with("src/") {
-                filename = &filename[4..];
-            }
-            if filename.ends_with(".rs") {
-                filename = &filename[..(filename.len()-3)];
-            }
-            eprint!("[DEBUG {}:{}] ", filename, line!());
-            eprintln!($($arg)*);
-        }
-    }
-}
 
 fn get_handler(name: &str) -> CmdHandler {
     match name {
@@ -139,18 +119,26 @@ fn main() {
         )
         .get_matches();
 
-    unsafe {
-        DEBUG_ENABLED = args.is_present("debug");
-    }
-    debug!("debug logging enabled");
-
     let (subname, subargs) = args.subcommand();
     let subargs = subargs.unwrap();
 
-    if let Err(err) = get_handler(subname)(subargs) {
-        if !err.to_string().is_empty() {
-            eprintln!("Error: {:#}", err);
+    // figure out the log level
+    let mut log_level =
+        if args.is_present("debug") { LevelFilter::Debug } else { LevelFilter::Info };
+    // special case for the check command's quiet modes
+    if subname == "check" {
+        let quiet = subargs.occurrences_of("quiet");
+        if quiet > 1 {
+            log_level = LevelFilter::Off;
+        } else if quiet == 1 {
+            log_level = LevelFilter::Warn;
         }
+    }
+    Logger::with_level(log_level).init();
+    debug!("debug logging enabled");
+
+    if let Err(err) = get_handler(subname)(subargs) {
+        error!("{:#}", err);
         std::process::exit(1);
     }
 }

@@ -22,6 +22,7 @@ pub fn cmd_hash(args: &ArgMatches) -> CmdResult {
     if let Err(err) = io::copy(&mut reader, &mut io::sink()) {
         Err(anyhow!("failed reading: {}", err))
     } else {
+        // directly print to stdout rather than log to stderr
         println!("0x{:08x}", reader.hash());
         Ok(())
     }

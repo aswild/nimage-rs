@@ -10,31 +10,11 @@ mod input;
 
 use std::process::exit;
 
-use anyhow::{anyhow, Context, Result};
-use clap::ArgMatches;
+use anyhow::Result;
 use clap::{crate_version, App, AppSettings, Arg};
+use yall::{log_macros::*, Logger};
 
 use input::Input;
-
-// copied from mknImage/main.rs
-// TODO: use the log crate or something cleaner
-static mut DEBUG_ENABLED: bool = false;
-#[macro_export]
-macro_rules! debug {
-    ($($arg:tt)*) => {
-        if unsafe { DEBUG_ENABLED } {
-            let mut filename = file!();
-            if filename.starts_with("src/") {
-                filename = &filename[4..];
-            }
-            if filename.ends_with(".rs") {
-                filename = &filename[..(filename.len()-3)];
-            }
-            eprint!("[DEBUG {}:{}] ", filename, line!());
-            eprintln!($($arg)*);
-        }
-    }
-}
 
 fn do_swdl(url: &str) -> Result<()> {
     let mut rx = Input::new(url)?;
@@ -63,15 +43,11 @@ fn main() {
         )
         .get_matches();
 
-    unsafe {
-        DEBUG_ENABLED = args.is_present("debug");
-    }
+    Logger::with_verbosity(3 + args.occurrences_of("debug")).init();
     debug!("debug logging enabled");
 
     if let Err(err) = do_swdl(args.value_of("url").unwrap()) {
-        if !err.to_string().is_empty() {
-            eprintln!("Error: {:#}", err);
-        }
+        error!("{:#}", err);
         exit(1);
     }
 }
