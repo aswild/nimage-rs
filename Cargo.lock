@@ -212,9 +212,9 @@ checksum = "712e227841d057c1ee1cd2fb22fa7e5a5461ae8e48fa2ca79ec42cfc1931183f"
 
 [[package]]
 name = "yall"
-version = "0.2.0"
+version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d4af8fb48bdee6facb16e57d4013d45a7b9330401550afe681714355b7372f7c"
+checksum = "fe5890707ec9bd2ad6a7fe34df0df60df1e0741064b8e2628dcf0d23e904bf6d"
 dependencies = [
  "atty",
  "log",
