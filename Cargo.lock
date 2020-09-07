@@ -168,6 +168,7 @@ dependencies = [
  "twox-hash",
  "yall",
  "zstd",
+ "zstd-sys",
 ]
 
 [[package]]
@@ -185,6 +186,12 @@ name = "number_prefix"
 version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "17b02fc0ff9a9e4b35b3342880f48e896ebf69f2967921fe8646bf5b7125956a"
+
+[[package]]
+name = "pkg-config"
+version = "0.3.18"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d36492546b6af1463394d46f0c834346f31548646f6ba10849802c9c9a27ac33"
 
 [[package]]
 name = "regex"
@@ -332,4 +339,5 @@ dependencies = [
  "glob",
  "itertools",
  "libc",
+ "pkg-config",
 ]
