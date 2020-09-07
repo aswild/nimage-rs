@@ -17,13 +17,13 @@ path = "src/swdl/main.rs"
 [dependencies]
 anyhow = "1.0"
 clap = "2"
+indicatif = "0.15"
 num_cpus = "1.13"
 yall = "0.3"
 zstd = { version = "0.5.3", features = ["zstdmt"] }
 
 # future deps for swdl
-#fstab = "0.4.0"
-#indicatif = "0.15.0"
+#proc-mounts = { git = "https://github.com/aswild/proc-mounts-rs" }
 #tempfile = "3.1.0"
 
 [dependencies.twox-hash]
