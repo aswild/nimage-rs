@@ -21,11 +21,15 @@ indicatif = "0.15"
 num_cpus = "1.13"
 yall = "0.3"
 zstd = { version = "0.5.3", features = ["zstdmt"] }
-zstd-sys = { version = "*", features = ["pkg-config"] }
+zstd-sys = "*"
 
 # future deps for swdl
 #proc-mounts = { git = "https://github.com/aswild/proc-mounts-rs" }
 #tempfile = "3.1.0"
+
+[features]
+default = ["pkg-config"]
+pkg-config = ["zstd-sys/pkg-config"]
 
 [dependencies.twox-hash]
 # pin to master until there's a new release
