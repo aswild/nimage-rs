@@ -6,9 +6,9 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-// FIXME: remove this when we actually start using this code
-#![allow(dead_code)]
-#![allow(unused_imports)]
+// allow unused stuff on x86_64, which won't use a lot of the code here
+#![cfg_attr(target_arch = "x86_64", allow(dead_code))]
+#![cfg_attr(target_arch = "x86_64", allow(unused_imports))]
 
 use anyhow::{anyhow, Context, Result};
 
@@ -16,20 +16,8 @@ use nimage::format::PartType;
 
 const ROOTFS_DEVS: [&str; 2] = ["/dev/mmcblk0p2", "/dev/mmcblk0p3"];
 
-#[cfg(not(target_arch = "x86_64"))]
 pub fn get_cmdline() -> std::io::Result<String> {
     std::fs::read_to_string("/proc/cmdline")
-}
-
-#[cfg(target_arch = "x86_64")]
-pub fn get_cmdline() -> std::io::Result<String> {
-    // Example of what /proc/cmdline looks like on a Pi4. Used for testing on x86
-    Ok("coherent_pool=1M 8250.nr_uarts=1 snd_bcm2835.enable_compat_alsa=0 \
-        snd_bcm2835.enable_hdmi=1 snd_bcm2835.enable_headphones=1 bcm2708_fb.fbwidth=0 \
-        bcm2708_fb.fbheight=0 bcm2708_fb.fbswap=1 smsc95xx.macaddr=DE:AD:BE:EF:12:34 \
-        vc_mem.mem_base=0x3ec00000 vc_mem.mem_size=0x40000000 dwc_otg.lpm_enable=0 \
-        console=ttyAMA0,115200 root=/dev/mmcblk0p2 ro rootwait"
-        .to_owned())
 }
 
 pub fn get_active_rootfs(cmdline: &str) -> Option<&str> {
@@ -83,6 +71,7 @@ pub fn raw_dest_path(ptype: PartType) -> Result<&'static str> {
     }
 }
 
+#[allow(dead_code)] // FIXME
 pub fn update_rootfs(cmdline: &str, new_rootfs: &str, rw: bool) -> String {
     let new_rootfs_word = format!("root={}", new_rootfs);
     let mut set_root = false;
