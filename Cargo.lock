@@ -164,6 +164,7 @@ dependencies = [
  "anyhow",
  "clap",
  "indicatif",
+ "libc",
  "num_cpus",
  "twox-hash",
  "yall",

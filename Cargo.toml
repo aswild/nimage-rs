@@ -18,6 +18,7 @@ path = "src/swdl/main.rs"
 anyhow = "1.0"
 clap = "2"
 indicatif = "0.15"
+libc = "0.2"
 num_cpus = "1.13"
 yall = "0.3"
 zstd = { version = "0.5.3", features = ["zstdmt"] }

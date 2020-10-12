@@ -8,6 +8,11 @@
 
 // FIXME: remove this when we actually start using this code
 #![allow(dead_code)]
+#![allow(unused_imports)]
+
+use anyhow::{anyhow, Context, Result};
+
+use nimage::format::PartType;
 
 const ROOTFS_DEVS: [&str; 2] = ["/dev/mmcblk0p2", "/dev/mmcblk0p3"];
 
@@ -46,6 +51,36 @@ pub fn get_inactive_rootfs(cmdline: &str) -> Option<&'static str> {
         }
     }
     None
+}
+
+/// Get the destination path for a raw PartType
+#[cfg(not(target_arch = "x86_64"))]
+pub fn raw_dest_path(ptype: PartType) -> Result<&'static str> {
+    const NOT_FOUND_MSG: &str =
+        "failed to get inactive rootfs. root= in /proc/cmdline is missing or unrecognized";
+
+    match ptype {
+        PartType::BootImg => Ok("/dev/mmcblk0p1"),
+        PartType::Rootfs | PartType::RootfsRw => {
+            let cmdline = get_cmdline().with_context(|| "failed to get kernel cmdline")?;
+            get_inactive_rootfs(&cmdline).ok_or_else(|| anyhow!(NOT_FOUND_MSG))
+        }
+        PartType::BootTar | PartType::Invalid => {
+            Err(anyhow!("Part type {} is not a raw partition"))
+        }
+    }
+}
+
+/// Get the destination path for a raw PartType
+/// on x86, always write to /dev/null
+#[cfg(target_arch = "x86_64")]
+pub fn raw_dest_path(ptype: PartType) -> Result<&'static str> {
+    match ptype {
+        PartType::BootImg | PartType::Rootfs | PartType::RootfsRw => Ok("/dev/null"),
+        PartType::BootTar | PartType::Invalid => {
+            Err(anyhow!("Part type {} is not a raw partition"))
+        }
+    }
 }
 
 pub fn update_rootfs(cmdline: &str, new_rootfs: &str, rw: bool) -> String {
